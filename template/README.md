@@ -9,8 +9,8 @@ Licensed under the [Apache License 2.0](LICENSE).
 ## Development
 
 The canonical environment is the ndof dev container, defined in
-[ndof-infra](https://github.com/__GITHUB_OWNER__/ndof-infra) — full onboarding guide:
-[docs/onboarding.md](https://github.com/__GITHUB_OWNER__/ndof-infra/blob/main/docs/onboarding.md).
+[ndof-infra](https://github.com/ndof-opensource/ndof-infra) — full onboarding guide:
+[docs/onboarding.md](https://github.com/ndof-opensource/ndof-infra/blob/main/docs/onboarding.md).
 
 Prerequisites: Docker (Docker Desktop or OrbStack) and a devcontainer-capable
 editor (VS Code, Zed, JetBrains) or the

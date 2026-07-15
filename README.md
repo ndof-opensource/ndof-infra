@@ -52,23 +52,42 @@ its next ref bump.
 - Libraries are **plain CMake packages** (proper `install()`/`export()`); Conan
   is how *we* consume and publish, never a requirement imposed on consumers.
 
-## Bootstrap (one-time)
+## Forking this environment (bootstrap for your own organization)
 
-1. Create the GitHub org/owner and push this repo as `ndof-infra`.
-2. Run the `build-image` workflow (or push to main); make the
-   `ndof-dev` GHCR package public so CI containers and devcontainers can pull
-   it without credentials.
-3. Take the digest it prints and pin it in each project repo (devcontainer +
-   CI stub), and pin the `ci.yml` ref to a tag or SHA.
-4. Enable branch protection (Settings → Rules) on `main` of **every** repo,
-   this one included: require the CI status checks to pass, require branches
-   to be up to date before merging, and forbid direct pushes. This is what
-   makes a red PR unmergeable — without it, CI is advisory.
-5. Add the Apache-2.0 `LICENSE` file when creating each repo (decision
-   recorded in docs/decisions.md; per-file SPDX headers and AUTHORS files are
-   already in place).
-6. Stand up a private Conan remote (Artifactory CE or GitLab package registry)
-   for publishing `ndof-*` packages; add lockfiles to the library repos.
+Projects stamped from `template/` ride the
+published ndof-opensource environment by default (decision 12 in
+docs/decisions.md) and need none of the steps below — clone, stamp, build.
+Fork this repository only if you want **environmental independence**: your
+own image, your own CI pipeline, published under your own org.
+
+1. Fork (or copy) this repository into your organization.
+2. In the org settings (Settings → Packages), allow members to create
+   **public packages** — new orgs disallow this by default, which silently
+   blocks step 4.
+3. Run the `build-image` workflow (Actions → "Build and publish dev image" →
+   Run workflow; it also fires on pushes to main touching `image/` or the
+   profiles). It publishes `ghcr.io/<your-org>/ndof-dev` and prints the
+   image digest in its final step.
+4. Make the `ndof-dev` GHCR package public (package page → settings → Danger
+   Zone) so devcontainers and CI containers can pull it anonymously.
+5. Repoint the template at *your* environment: in
+   `template/.devcontainer/devcontainer.json` and
+   `template/.github/workflows/ci.yml`, replace `ndof-opensource` with your
+   org, the image digest with the one from step 3, and the workflow-ref SHA
+   with your fork's main commit. Projects stamped from then on are born
+   pinned to your environment, and Dependabot maintains the pins.
+6. Make the template yours: `template/AUTHORS`, the copyright line in the
+   SPDX file headers, and — if you are not shipping Apache-2.0 — `LICENSE`
+   and the `license` field in `conanfile.py`. Note that the `ndof-` naming
+   (package names, the `ndof::` namespace) is baked into the template;
+   renaming is a find-and-replace decision to make before your first stamp.
+7. Enable a branch ruleset on `main`: require the `self-test` status check,
+   require branches up to date, PRs only. Your first PR
+   will exercise `self-test`, which builds the image and runs the full
+   pipeline against a scratch stamp — the fork validates itself.
+8. When your libraries start consuming each other as packages, stand up a
+   Conan remote (Artifactory CE or a GitLab package registry) and add
+   lockfiles.
 
 ## Local image build (optional)
 
@@ -83,3 +102,9 @@ scripts/new-project.sh <name> "<description>" <dest-dir> [github-owner]
 # e.g.
 scripts/new-project.sh callable "Callable traits and utilities for ndof" ../ndof-callable my-org
 ```
+
+The `github-owner` argument affects only the stamped project's *identity*
+URLs (homepage, package metadata). Environment references — image digest,
+CI workflow — are absolute and always point at the environment this repo
+publishes (decision 12); a stamp under any owner builds and tests
+immediately.

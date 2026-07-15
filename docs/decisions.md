@@ -170,10 +170,27 @@ are not applied in this repository — apt package patch-levels float at image-b
 time, and upstream trust (Canonical/LLVM/PyPI signing keys) is accepted. This is
 not deferred technical debt of the public layer: it is a control that belongs to a
 different artifact with a different threat model. The public dev image serves OSS
-contributors and CI, where "consistent, auditable, explicitly adopted" (digest pins, SBOM,
-reviewed bumps) is the chosen proportionate standard. Bit-reproducible
+contributors and CI, where "consistent, auditable, explicitly adopted" (digest
+pins, SBOM, reviewed bumps) is the chosen proportionate standard. Bit-reproducible
 builds from controlled inputs will be the standard of the future private build
 environment (ndof-infra-internal, decision 7), which will layer FROM this image
 and add those stricter input controls on top. If the private layer is never built,
 this repository is not missing a control; if it is built, the requirement lands
 there, not here.
+
+## 12. Template environment references are absolute and pinned
+
+**Decision.** In `template/`, references to the development environment —
+the dev-image digest in `devcontainer.json`, the reusable-workflow ref and
+image input in the CI stub, and the README's links to ndof-infra — are
+hard-coded to `ndof-opensource` and pinned (digest / commit SHA). Only
+identity references (the stamped project's own URLs in `CMakeLists.txt`
+and `conanfile.py`) use the `__GITHUB_OWNER__` token.
+
+**Rationale.** A digest and a workflow SHA are inherently specific to the
+publishing org; pairing them with a tokenized owner produces references
+that cannot resolve for any other owner. Absolute environment refs mean a
+third-party stamp works immediately, riding the public ndof environment
+(anonymous image pulls; reusable workflows execute on the caller's
+runners, at no cost to this org). Environmental independence remains
+available as an explicit fork-and-repin, per the README bootstrap.

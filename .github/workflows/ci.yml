@@ -100,8 +100,10 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install pinned tools
         # --break-system-packages: the runner's Python is externally managed
-        # (PEP 668) and refuses --user installs without it.
-        run: python3 -m pip install --user --break-system-packages "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
+        # (PEP 668). No --user: its script dir is not on the runner's PATH,
+        # so tools would install but not be findable. The runner is ephemeral;
+        # installing into its Python prefix is fine and matches Windows.
+        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
       - run: conan profile detect --force
       - run: conan install . --build=missing -s build_type=Release -s compiler.cppstd=23
       - run: cmake --preset release

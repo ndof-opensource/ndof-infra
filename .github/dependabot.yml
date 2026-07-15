@@ -1,0 +1,14 @@
+# Keeps the supply-chain pins fresh: opens PRs when a pinned GitHub Action
+# has a new release or Canonical publishes a newer ubuntu:24.04 base image.
+# Every such PR triggers test-infra.yml, so bumps arrive pre-validated and
+# are adopted by review — pins never rot silently.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /image
+    schedule:
+      interval: weekly

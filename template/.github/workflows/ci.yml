@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    # TODO: pin both references —
+    #   * the reusable workflow to a tag or commit SHA of ndof-infra
+    #   * the image to the digest printed by ndof-infra's build-image workflow
+    # so this repo's history records exactly which environment built each commit.
+    uses: __GITHUB_OWNER__/ndof-infra/.github/workflows/ci.yml@main
+    with:
+      image: ghcr.io/__GITHUB_OWNER__/ndof-dev:latest

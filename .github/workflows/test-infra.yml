@@ -1,0 +1,71 @@
+# Self-test for this repository: proves the Dockerfile, Conan profiles,
+# project template, and generator script work *as a system* before a change
+# merges. Builds the image (single-arch, never published), stamps a scratch
+# project from the template, and runs the full library pipeline inside the
+# freshly built image — the same sequence library CI runs.
+#
+# The digest/ref pins in library repos are the second firewall: even if a bad
+# infra change lands, libraries only adopt it via an explicit pin-bump PR,
+# which runs their CI against the new environment first.
+
+name: Test infrastructure
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  self-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build image (amd64 only, not published)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: image/Dockerfile
+          load: true
+          tags: ndof-dev:selftest
+
+      - name: Stamp a scratch project from the template
+        run: |
+          scripts/new-project.sh scratch "Infra self-test scratch project" /tmp/ndof-scratch
+          if grep -rn "__PROJECT\|__GITHUB" /tmp/ndof-scratch --exclude-dir=.git; then
+            echo "::error::unsubstituted template tokens remain"; exit 1
+          fi
+          if find /tmp/ndof-scratch -name '*__*' -not -path '*/.git/*' | grep .; then
+            echo "::error::template token remains in a file or directory name"; exit 1
+          fi
+          # The container's dev user is uid 1000; the runner user is not.
+          sudo chown -R 1000:1000 /tmp/ndof-scratch
+
+      - name: Build and test in the image (GCC profile)
+        run: |
+          docker run --rm -v /tmp/ndof-scratch:/work -w /work ndof-dev:selftest bash -c '
+            set -e
+            conan install . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Debug
+            cmake --preset debug
+            cmake --build --preset debug
+            ctest --preset debug
+          '
+
+      - name: Build, test, sanitize, and lint in the image (Clang profile)
+        run: |
+          docker run --rm -v /tmp/ndof-scratch:/work -w /work ndof-dev:selftest bash -c '
+            set -e
+            rm -rf build
+            conan install . --build=missing -pr:a /opt/conan/profiles/linux-clang19 -s build_type=Debug
+            cmake --preset debug
+            cmake --build --preset debug
+            ctest --preset debug
+            cmake --preset asan
+            cmake --build --preset asan
+            ctest --preset asan
+            git add -A
+            git ls-files "*.cpp" "*.hpp" | xargs -r clang-format --dry-run -Werror
+            run-clang-tidy -p build/Debug -warnings-as-errors="*" -quiet
+          '

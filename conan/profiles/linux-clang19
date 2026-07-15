@@ -1,0 +1,16 @@
+# Team profile: Linux + Clang 19, C++23 (libstdc++, matching the GCC profile
+# so both compilers exercise the same standard library).
+{% set arch = "armv8" if platform.machine() in ["arm64", "aarch64"] else "x86_64" %}
+
+[settings]
+os=Linux
+arch={{ arch }}
+build_type=Release
+compiler=clang
+compiler.version=19
+compiler.libcxx=libstdc++11
+compiler.cppstd=23
+
+[conf]
+tools.cmake.cmaketoolchain:generator=Ninja
+tools.build:compiler_executables={"c": "clang-19", "cpp": "clang++-19"}

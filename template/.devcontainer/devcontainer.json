@@ -1,0 +1,22 @@
+{
+    "name": "ndof-__PROJECT_NAME__",
+    // TODO: after the first image publish, replace ":latest" with the
+    // immutable digest printed by ndof-infra's build-image workflow, e.g.
+    //   ghcr.io/__GITHUB_OWNER__/ndof-dev@sha256:<digest>
+    // The digest pin is what makes this repo's environment reproducible.
+    "image": "ghcr.io/__GITHUB_OWNER__/ndof-dev:latest",
+    "remoteUser": "dev",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cmake-tools"
+            ],
+            "settings": {
+                "clangd.arguments": [
+                    "--compile-commands-dir=${workspaceFolder}/build/Debug"
+                ]
+            }
+        }
+    }
+}

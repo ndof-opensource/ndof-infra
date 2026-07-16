@@ -4,6 +4,11 @@
 # jobs run inside that image (identical to the local devcontainer); the macOS
 # and Windows jobs run on native runners and are the portability enforcers —
 # the container guarantees consistency, this matrix guarantees compatibility.
+#
+# Container jobs run with `--user root`: the runner's work directories belong
+# to the host runner user, and actions must write state files there — the
+# image's non-root `dev` user cannot (EACCES at checkout). Devcontainers are
+# unaffected; they select `dev` via remoteUser.
 
 name: Library CI
 
@@ -25,7 +30,9 @@ env:
 jobs:
   format:
     runs-on: ubuntu-24.04
-    container: ${{ inputs.image }}
+    container:
+      image: ${{ inputs.image }}
+      options: --user root
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -34,7 +41,9 @@ jobs:
 
   linux:
     runs-on: ubuntu-24.04
-    container: ${{ inputs.image }}
+    container:
+      image: ${{ inputs.image }}
+      options: --user root
     strategy:
       fail-fast: false
       matrix:
@@ -57,7 +66,9 @@ jobs:
   sanitize:
     name: ASan + UBSan
     runs-on: ubuntu-24.04
-    container: ${{ inputs.image }}
+    container:
+      image: ${{ inputs.image }}
+      options: --user root
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: >
@@ -71,7 +82,9 @@ jobs:
   tidy:
     name: clang-tidy
     runs-on: ubuntu-24.04
-    container: ${{ inputs.image }}
+    container:
+      image: ${{ inputs.image }}
+      options: --user root
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: >
@@ -86,7 +99,11 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Install pinned tools
-        run: python3 -m pip install --user "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
+        # --break-system-packages: the runner's Python is externally managed
+        # (PEP 668). No --user: its script dir is not on the runner's PATH,
+        # so tools would install but not be findable. The runner is ephemeral;
+        # installing into its Python prefix is fine and matches Windows.
+        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
       - run: conan profile detect --force
       - run: conan install . --build=missing -s build_type=Release -s compiler.cppstd=23
       - run: cmake --preset release
@@ -101,7 +118,11 @@ jobs:
         run: python -m pip install "conan==$env:CONAN_VERSION" "cmake==$env:CMAKE_VERSION" "ninja==$env:NINJA_VERSION"
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
       - run: conan profile detect --force
-      - run: conan install . --build=missing -s build_type=Release -s compiler.cppstd=23
+      # Force the Ninja generator: Conan's detected MSVC default is a
+      # multi-config generator, whose cmake_layout writes build/generators —
+      # our presets expect the single-config layout (build/<Type>/generators)
+      # used on every other platform.
+      - run: conan install . --build=missing -s build_type=Release -s compiler.cppstd=23 -c tools.cmake.cmaketoolchain:generator=Ninja
       - run: cmake --preset release
       - run: cmake --build --preset release
       - run: ctest --preset release

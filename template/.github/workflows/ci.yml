@@ -7,10 +7,8 @@ on:
 
 jobs:
   ci:
-    # TODO: pin both references —
-    #   * the reusable workflow to a tag or commit SHA of ndof-infra
-    #   * the image to the digest printed by ndof-infra's build-image workflow
-    # so this repo's history records exactly which environment built each commit.
-    uses: __GITHUB_OWNER__/ndof-infra/.github/workflows/ci.yml@main
+    # Pinned environment: Dependabot maintains the workflow-ref SHA; bump the
+    # image digest (here and in .devcontainer/devcontainer.json) in the same PR.
+    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@d78f081431a7c3ab2d75c717bf6a2397dca60930 # main 2026-07-15
     with:
-      image: ghcr.io/__GITHUB_OWNER__/ndof-dev:latest
+      image: ghcr.io/ndof-opensource/ndof-dev@sha256:eb3a71a32d2258a5b62f0a2608e4912f207f7f31194c118b097587a715a2c229

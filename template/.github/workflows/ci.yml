@@ -9,6 +9,6 @@ jobs:
   ci:
     # Pinned environment: Dependabot maintains the workflow-ref SHA; bump the
     # image digest (here and in .devcontainer/devcontainer.json) in the same PR.
-    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@6821a7bba20f3f6469208c5f0760c32ae448bcf4 # main 2026-07-15
+    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@d78f081431a7c3ab2d75c717bf6a2397dca60930 # main 2026-07-15
     with:
       image: ghcr.io/ndof-opensource/ndof-dev@sha256:eb3a71a32d2258a5b62f0a2608e4912f207f7f31194c118b097587a715a2c229

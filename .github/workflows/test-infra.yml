@@ -68,4 +68,5 @@ jobs:
             git add -A
             git ls-files "*.cpp" "*.hpp" | xargs -r clang-format --dry-run -Werror
             run-clang-tidy -p build/Debug -warnings-as-errors="*" -quiet
+            cppcheck --project=build/Debug/compile_commands.json --library=googletest --enable=warning,style,performance,portability --error-exitcode=1 --quiet
           '

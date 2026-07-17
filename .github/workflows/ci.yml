@@ -94,6 +94,29 @@ jobs:
       - run: cmake --preset debug
       - run: run-clang-tidy -p build/Debug -warnings-as-errors='*' -quiet
 
+  cppcheck:
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ inputs.image }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: >
+          conan install . --build=missing
+          -pr:a /opt/conan/profiles/linux-clang19
+          -s build_type=Debug
+      - run: cmake --preset debug
+      # Second static analyzer alongside clang-tidy — different engine,
+      # different defect classes. Driven by the compile database so it
+      # analyzes exactly the translation units CMake compiles.
+      # --library=googletest teaches cppcheck gtest's TEST() macros; without
+      # it the test files are unparseable (syntaxError).
+      - run: >
+          cppcheck --project=build/Debug/compile_commands.json
+          --library=googletest
+          --enable=warning,style,performance,portability
+          --error-exitcode=1 --quiet
+
   macos:
     runs-on: macos-14 # arm64
     steps:

@@ -96,6 +96,7 @@ stub in each repo. Every push and pull request runs:
 | `linux` (GCC & Clang × Debug & Release) | Builds and tests pass in the canonical environment | `scripts/build.sh debug` / `--profile linux-clang19` / `release` |
 | `sanitize` | No memory errors or undefined behavior at runtime (ASan + UBSan) | `scripts/build.sh asan` |
 | `tidy` | Static-analysis clean per `.clang-tidy`, warnings as errors | `run-clang-tidy -p build/Debug -warnings-as-errors='*'` |
+| `cppcheck` | A second, independent static analyzer also finds nothing | `cppcheck --project=build/Debug/compile_commands.json --library=googletest --enable=warning,style,performance,portability --error-exitcode=1` |
 | `macos` / `windows` | Portability to AppleClang and MSVC | native runners only — CI is the arbiter |
 
 The objective of CI (**Continuous Integration**): every change is built and
@@ -105,20 +106,77 @@ minutes and quality is the default path, not a discipline. The **CD**
 environment image on merge; automated Conan package publishing on release
 tags is planned alongside the private remote.
 
-## Changing the environment itself
+## Changing the environment: the two pins and how changes propagate
 
-1. PR to this repo (usually a one-line `ARG` bump in `image/Dockerfile` —
-   every toolchain version is declared once at the top).
-2. Merge → `build-image.yml` builds multi-arch, pushes to GHCR, and prints
-   the new **digest** (`sha256:…` content fingerprint).
-3. Each project adopts explicitly by updating its digest pin (devcontainer +
-   CI stub). Projects can adopt at different times; pins make drift explicit.
-4. Rollback = revert the pin.
+The environment reaches a library repo through exactly two pinned
+references, one of which appears twice:
+
+- **The image digest** — *which environment*: compilers, tools, Conan
+  profiles. Pinned in `.devcontainer/devcontainer.json` (what humans get)
+  and in the CI stub's `image:` input (what CI gets). The two must always
+  name the same digest; the `digest-sync` CI job fails any commit where
+  they disagree.
+- **The workflow SHA** — *which CI logic*: the jobs, their commands, the
+  gates. Pinned in the CI stub's `uses:` line.
+
+`template/` in this repo carries the master copies of the same three
+references (digest ×2, SHA ×1); refreshing them is what future stamps
+inherit.
+
+What each kind of infra change requires:
+
+| Change in ndof-infra | Produces | Re-pins required | Automated? |
+|---|---|---|---|
+| `image/Dockerfile`, `conan/profiles/` | new image digest (published by `build-image.yml` on merge) | digest, in every library (both devcontainer.json and ci.yml, one PR per repo) and in `template/` | **never** — always manual |
+| reusable `ci.yml` | new commit SHA on `main` | workflow SHA in each stub | yes — Dependabot bumps it weekly; bump manually to adopt sooner |
+| both at once (new tool + a CI job using it) | both | digest **and** SHA together, one PR per repo | no — see the ordering rule |
+| docs, `scripts/`, `template/` files | new SHA, but no library-facing behavior | none (existing repos may hand-sync template file changes if wanted) | — |
+
+What Dependabot covers:
+
+- **In this repo:** the ubuntu base line in the Dockerfile (docker
+  ecosystem) and action SHA pins in our own workflows (github-actions
+  ecosystem).
+- **In each library:** action SHA pins, including the reusable-workflow
+  `uses:` line. Because this repo publishes no releases, Dependabot tracks
+  the latest `main` commit — every infra merge, even docs-only, eventually
+  arrives as a bump PR, validated by the library's full CI before merge.
+
+What Dependabot never touches — always manual:
+
+- **The image digest, in either file.** Nothing scans `devcontainer.json`,
+  and the stub's `image:` input is an opaque string to it. This is the one
+  pin that silently rots if forgotten — which is why `digest-sync` exists.
+- The `env:` tool versions in the reusable `ci.yml` (Conan/CMake/Ninja for
+  the native macOS/Windows jobs) — kept matching the Dockerfile by hand,
+  in the same PR that changes the Dockerfile.
+- Files already stamped from `template/` into existing repos.
+
+The image-change checklist:
+
+1. PR to this repo changing `image/Dockerfile` (and `ci.yml` in the same
+   PR, if the change adds a gate). `test-infra.yml` builds and exercises
+   the candidate image before merge.
+2. Merge → `build-image.yml` publishes multi-arch and prints the new
+   digest; it is also available any time via
+   `docker buildx imagetools inspect ghcr.io/ndof-opensource/ndof-dev:latest`.
+3. One PR per library: the digest in both files — plus the workflow SHA if
+   `ci.yml` changed. That PR's CI running green against the new pins *is*
+   the adoption test.
+4. One PR back here refreshing `template/`'s pins the same way.
+5. Rollback = revert a pin PR. Nothing else to undo.
+
+**Ordering rule.** When a `ci.yml` change depends on an image change (a
+new job invoking a tool only the new image contains), never adopt the SHA
+without the digest. Do the paired bumps promptly after publish; if
+Dependabot's weekly SHA-only bump arrives first, it fails loudly in that
+library ("command not found") — push the digest bump onto that PR's
+branch, or close it and open the paired PR.
 
 Tags like `:latest` are conveniences that move; digests are immutable facts.
 Pin digests.
 
-## Footguns (each learned the hard way, once)
+## Common pitfalls (each learned the hard way, once)
 
 - **Switching compiler profiles requires a clean build tree.** CMake caches
   the compiler and silently ignores a changed toolchain in an existing

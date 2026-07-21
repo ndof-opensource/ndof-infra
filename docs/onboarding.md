@@ -128,6 +128,26 @@ Pin digests.
   home, not the mounted repo) while `build/` persists on the mount — a
   mismatch that yields confusing "missing gtest" errors. Persist it with
   `-v ndof-conan-cache:/home/dev/.conan2`, or just use a real devcontainer.
+- **Linux hosts: the checkout must be writable by the container user.**
+  Bind mounts preserve numeric uids, and the image's `dev` user is uid 1000.
+  Devcontainer tools bridge the gap by remapping `dev`'s uid to yours at
+  create time (`updateRemoteUserUID` — spec default, stated explicitly in
+  our devcontainer.json); VS Code and the devcontainer CLI do this
+  reliably, Zed currently has open bugs. Symptom: `PermissionError` on the
+  first write, usually deep inside Conan; `scripts/build.sh` fails fast
+  with the explanation. Diagnose with `id` (container user) vs `ls -ldn .`
+  (checkout owner). Never `chmod -R 777` around it — git then sees every
+  tracked file as modified (exec-bit mode changes that must not be
+  committed), and container-created files still end up owned by the wrong
+  uid. Fix the remapping, then re-clone if the tree was already chmodded.
+- **Editor code intelligence is configured by `.clangd`, and needs one
+  build first.** clangd finds the compile database via the repo's `.clangd`
+  file (`build/Debug` — clangd's default search never looks there). That
+  file is honored by every editor; anything under `customizations.vscode`
+  in devcontainer.json reaches VS Code *only* — Zed ignores it entirely.
+  On a fresh clone there is no compile database until `scripts/build.sh
+  debug` completes, so the editor shows include errors until the first
+  build finishes and the language server restarts.
 - **Format only with the pinned clang-format** (i.e., inside the container).
   Different clang-format majors disagree; CI enforces the pinned one.
 - **`ctest` passing while the build failed** usually means a stale test

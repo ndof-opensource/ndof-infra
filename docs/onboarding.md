@@ -113,6 +113,9 @@ tags is planned alongside the private remote.
    the new **digest** (`sha256:…` content fingerprint).
 3. Each project adopts explicitly by updating its digest pin (devcontainer +
    CI stub). Projects can adopt at different times; pins make drift explicit.
+   The two pins move together: CI's `digest-sync` job fails any commit where
+   `devcontainer.json` and the CI stub disagree, so half-done bumps cannot
+   land silently.
 4. Rollback = revert the pin.
 
 Tags like `:latest` are conveniences that move; digests are immutable facts.
@@ -124,6 +127,16 @@ Pin digests.
   the compiler and silently ignores a changed toolchain in an existing
   `build/`. `scripts/build.sh` detects the switch and cleans automatically;
   doing it by hand, `rm -rf build` first.
+- **A build tree remembers the absolute path it was created at.** Using one
+  checkout from different mount points — plain `docker run` at `/work`, a
+  devcontainer at `/workspaces/<name>` — fails with "CMakeCache.txt directory
+  … is different". `scripts/build.sh` detects the move and cleans
+  automatically; by hand, `rm -rf build`.
+- **Zed's dev containers are local-only (v1).** Zed cannot chain SSH remoting
+  with dev containers — an SSH-remote project shows no "reopen in container"
+  prompt. On remote machines, use the devcontainer CLI
+  (`npx @devcontainers/cli up --workspace-folder .`) or VS Code, or open the
+  repo on the machine where Docker runs.
 - **One-shot `docker run` loses the Conan cache** (it lives in the container
   home, not the mounted repo) while `build/` persists on the mount — a
   mismatch that yields confusing "missing gtest" errors. Persist it with

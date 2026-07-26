@@ -78,6 +78,20 @@ elif [[ -f build/.last-profile && "$(cat build/.last-profile)" != "$PROFILE" ]];
     run rm -rf build
 fi
 
+# A build tree also remembers the absolute path it was created at. Using the
+# same checkout from different mount points (plain `docker run` at /work, a
+# devcontainer at /workspaces/<name>, the bare host) breaks CMake's cached
+# paths; detect the move and clean, as with a profile switch.
+for cache in build/*/CMakeCache.txt; do
+    [[ -f $cache ]] || continue
+    cached_src=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache")
+    if [[ -n $cached_src && $cached_src != "$PWD" ]]; then
+        echo "build tree was created at $cached_src (now $PWD): cleaning build/" >&2
+        run rm -rf build
+        break
+    fi
+done
+
 run conan install . --build=missing "${PROFILE_ARGS[@]}" -s build_type=$BUILD_TYPE
 mkdir -p build
 echo "$PROFILE" > build/.last-profile

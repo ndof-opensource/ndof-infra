@@ -127,6 +127,16 @@ Pin digests.
   the compiler and silently ignores a changed toolchain in an existing
   `build/`. `scripts/build.sh` detects the switch and cleans automatically;
   doing it by hand, `rm -rf build` first.
+- **A build tree remembers the absolute path it was created at.** Using one
+  checkout from different mount points — plain `docker run` at `/work`, a
+  devcontainer at `/workspaces/<name>` — fails with "CMakeCache.txt directory
+  … is different". `scripts/build.sh` detects the move and cleans
+  automatically; by hand, `rm -rf build`.
+- **Zed's dev containers are local-only (v1).** Zed cannot chain SSH remoting
+  with dev containers — an SSH-remote project shows no "reopen in container"
+  prompt. On remote machines, use the devcontainer CLI
+  (`npx @devcontainers/cli up --workspace-folder .`) or VS Code, or open the
+  repo on the machine where Docker runs.
 - **One-shot `docker run` loses the Conan cache** (it lives in the container
   home, not the mounted repo) while `build/` persists on the mount — a
   mismatch that yields confusing "missing gtest" errors. Persist it with

@@ -9,6 +9,11 @@
 # to the host runner user, and actions must write state files there — the
 # image's non-root `dev` user cannot (EACCES at checkout). Devcontainers are
 # unaffected; they select `dev` via remoteUser.
+#
+# The digest-sync job asserts that the calling repo's devcontainer pins the
+# same image it passed to this workflow. Both pins are updated by hand, and
+# only ever together; this turns a forgotten half of that edit into a red X
+# instead of a silently diverging local environment.
 
 name: Library CI
 
@@ -28,6 +33,27 @@ env:
   NINJA_VERSION: 1.11.1.1
 
 jobs:
+  digest-sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: devcontainer pin matches CI image
+        env:
+          CI_IMAGE: ${{ inputs.image }}
+        # devcontainer.json is JSONC (comments allowed), so extract with sed
+        # rather than a strict JSON parser.
+        run: |
+          devc_image=$(sed -n 's/^[[:space:]]*"image":[[:space:]]*"\([^"]*\)".*/\1/p' .devcontainer/devcontainer.json | head -n 1)
+          if [[ -z "$devc_image" ]]; then
+            echo '::error file=.devcontainer/devcontainer.json::no "image" entry found — every ndof repo pins its dev environment here'
+            exit 1
+          fi
+          if [[ "$devc_image" != "$CI_IMAGE" ]]; then
+            echo "::error file=.devcontainer/devcontainer.json::environment pins have drifted: devcontainer.json pins $devc_image but CI was called with $CI_IMAGE — update both pins in the same commit"
+            exit 1
+          fi
+          echo "devcontainer and CI agree on $CI_IMAGE"
+
   format:
     runs-on: ubuntu-24.04
     container:

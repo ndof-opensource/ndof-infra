@@ -85,6 +85,28 @@ identical commands: `debug`, `release`, and sanitizer variants `asan`, `tsan`
 points into `build/Debug/generators/`). Each has matching build and test
 presets; `ctest` is CMake's test runner, which discovers the gtest suites.
 
+## Where does a new header go?
+
+Three questions, asked in order (decision 14 has the full reasoning):
+
+1. **Will users call what is in it?** Then
+   `include/ndof/<lib>/`. This is the public API: documented,
+   semver-governed, reviewed as a promise.
+2. **Do public headers need to include it, even though users will never
+   call it directly?** Then `include/ndof/<lib>/details/`, in namespace
+   `ndof::<lib>::details`. Template machinery, traits, storage types: it
+   ships, because consumers' compilers must be able to read it, but
+   nothing under `details/` is supported API and all of it may change
+   without notice.
+3. **Neither?** Then `src/`, next to the sources that use it. It is
+   never installed; consumers cannot include what does not exist on
+   their machines.
+
+The install rule is the enforcement: `install(DIRECTORY include/)`
+ships tiers 1 and 2 and nothing else. Promoting a header from `src/`
+into `details/` (because a public header now needs it) grows the shipped
+surface; review it like an API change.
+
 ## The CI gates, and how to reproduce each locally
 
 CI logic lives once, in `.github/workflows/ci.yml` here, called by a ~10-line

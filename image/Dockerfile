@@ -10,7 +10,7 @@
 
 # Digest-pinned so the build's only external input is explicit; Dependabot
 # (docker ecosystem) opens PRs when Canonical publishes a newer 24.04 image.
-FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+FROM ubuntu:24.10@sha256:cdf755952ed117f6126ff4e65810bf93767d4c38f5c7185b50ec1f1078b464cc
 
 # ---- pinned toolchain versions ----------------------------------------------
 ARG GCC_MAJOR=14

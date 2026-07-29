@@ -178,6 +178,17 @@ and add those stricter input controls on top. If the private layer is never buil
 this repository is not missing a control; if it is built, the requirement lands
 there, not here.
 
+The same boundary applies to image signing and runtime signature
+verification (Sigstore/Cosign). A digest pin already *is* content
+verification — the runtime hashes what it pulls and rejects a mismatch, so
+no registry can substitute bits for a pinned digest. Verifying a signature
+at CI runtime would defend only against an attacker who can rewrite the
+pinned digest in a repo — and that attacker can edit the workflow files
+that perform the verification; branch protection and review are the
+controls that actually cover that path. Provenance is instead inspected by
+a human at pin-bump time, and signing/verification machinery is a private-
+layer control if it is ever needed.
+
 ## 12. Template environment references are absolute and pinned
 
 **Decision.** In `template/`, references to the development environment —
@@ -194,3 +205,23 @@ third-party stamp works immediately, riding the public ndof environment
 (anonymous image pulls; reusable workflows execute on the caller's
 runners, at no cost to this org). Environmental independence remains
 available as an explicit fork-and-repin, per the README bootstrap.
+
+## 13. CI container jobs run as root; devcontainers run as `dev`
+
+**Decision.** The reusable CI runs its container jobs with `--user root`.
+The devcontainer — the environment humans actually work in — runs as the
+non-root `dev` user (uid 1000).
+
+**Rationale.** GitHub Actions mounts the runner's work directories into
+job containers at job start, owned by the runner's host user. Those paths
+do not exist when the image is built, so no image-side permission scheme
+can make them writable to `dev`; without root, checkout fails (EACCES).
+Running as root in an ephemeral, discarded-after-job container is the
+ecosystem-standard resolution, and the asymmetry with local development is
+accepted: the toolchain and commands are identical, and permission-related
+behavior that would affect a person surfaces in the devcontainer, which is
+non-root. Alternatives rejected: world-writable directories baked into the
+image (`chmod 777`) fix a directory that was never the problem and turn
+the Conan cache into something any compromised build step can poison; a
+user matching the runner's uid cannot be baked in, because that uid is a
+host detail images should not encode.

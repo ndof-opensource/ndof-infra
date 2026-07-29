@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         make pkg-config \
         gcc-${GCC_MAJOR} g++-${GCC_MAJOR} \
         gdb ccache \
+        cppcheck \
         python3 python3-venv \
     && rm -rf /var/lib/apt/lists/*
 

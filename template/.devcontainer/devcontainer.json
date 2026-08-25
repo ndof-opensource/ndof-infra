@@ -5,17 +5,20 @@
     // update this digest in the same PR to keep local and CI identical.
     "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:eb3a71a32d2258a5b62f0a2608e4912f207f7f31194c118b097587a715a2c229",
     "remoteUser": "dev",
+    // Spec default, stated explicitly because Linux hosts depend on it: at
+    // create time the tool rebuilds the image with dev's uid/gid remapped to
+    // the host user's, keeping the bind-mounted checkout writable. VS Code
+    // and the devcontainer CLI honor this reliably; Zed has open bugs here.
+    "updateRemoteUserUID": true,
+    // Editor-agnostic tooling config lives in editor-agnostic files: clangd
+    // is configured by the repo's .clangd (every editor honors it). This
+    // block carries VS Code niceties only.
     "customizations": {
         "vscode": {
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools"
-            ],
-            "settings": {
-                "clangd.arguments": [
-                    "--compile-commands-dir=${workspaceFolder}/build/Debug"
-                ]
-            }
+            ]
         }
     }
 }

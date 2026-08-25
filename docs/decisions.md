@@ -225,3 +225,49 @@ image (`chmod 777`) fix a directory that was never the problem and turn
 the Conan cache into something any compromised build step can poison; a
 user matching the runner's uid cannot be baked in, because that uid is a
 host detail images should not encode.
+
+## 14. Header layout: three visibility tiers
+
+**Decision.** Each library's headers are organized in three tiers:
+
+- `include/ndof/<lib>/` is the public API: headers users are expected to
+  include and call, documented and governed by semantic versioning.
+- `include/ndof/<lib>/details/` holds implementation headers that public
+  headers must include transitively (template machinery, traits, storage
+  types). They ship with the package because consumers' compilers need
+  them, but they are not part of the supported API and may change
+  without notice. Namespaces mirror folders: `ndof::<lib>::details`.
+- `src/` holds everything only the library's own translation units use:
+  sources and private headers. Nothing in `src/` is installed.
+
+The subdirectory is named `details`, matching spdlog and the
+convention as documented in WG21 P1204R0. Sibling conventions exist in
+first-tier projects (`detail` in Boost and nlohmann/json, `internal`
+in googletest and Abseil); the tiers themselves are common to all of
+them, and we standardize on one name.
+
+**Rationale.** The install boundary is the enforcement mechanism for
+visibility: `install(DIRECTORY include/)` ships every header under
+`include/` and nothing else. Placing internal-only headers in `src/`
+therefore makes privacy physical rather than advisory: those files do
+not exist on a consumer's machine, so no convention has to ask users
+not to depend on them. `details/` exists because C++ forces some
+implementation into shipped headers: template and inline definitions
+must be visible to consumers' compilers, and the subdirectory (with its
+matching namespace) marks exactly that code as outside the supported
+API while still delivering it. Keeping `ndof/` directly under
+`include/` preserves a further property: the line
+`#include <ndof/<lib>/...>` resolves identically in the source tree and
+against an installed package, so tests, examples, and documentation
+always use the exact syntax consumers use. The classification test for
+any new header: users call it, public; a public header includes it but
+users do not call it, `details/`; neither, `src/`. Promoting a header
+from `src/` to `details/` is therefore always a visible, reviewable
+growth of the shipped surface, never a silent reclassification.
+
+**Consequence.** No build changes: the existing install rules already
+ship `details/` whenever a library creates one and already exclude
+`src/`. `details/` directories are created on first need rather than
+pre-seeded into the template. Header-heavy libraries (callable, error)
+will carry most of their implementation in `details/` since template
+definitions must be visible to consumers' compilers.

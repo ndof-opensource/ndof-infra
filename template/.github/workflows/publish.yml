@@ -1,0 +1,20 @@
+# Publishes this library's Conan recipe to the public ndof remote when a
+# version tag (v0.1.1) is pushed. All logic lives in the reusable workflow
+# in ndof-infra; see ndof-infra/docs/releasing.md for the specific procedure.
+#
+# PUBLISH_SHA is stamped with a placeholder until ndof-infra's publish
+# workflow first lands on main. The template refresh that follows replaces
+# it with the real commit SHA. Keep the image digest identical to the ones
+# in .devcontainer/devcontainer.json and ci.yml (all pins move together).
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  publish:
+    uses: ndof-opensource/ndof-infra/.github/workflows/publish.yml@PUBLISH_SHA # main YYYY-MM-DD
+    with:
+      image: ghcr.io/ndof-opensource/ndof-dev@sha256:7f7c7fe45686039136f1a5608a2aadd4d49a9219be9fb4706edf12399d2c348b
+    secrets:
+      CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
+      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}

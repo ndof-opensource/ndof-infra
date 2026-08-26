@@ -1,20 +1,22 @@
 # Reusable CI for all ndof library repositories.
 #
-# Each library repo calls this with the dev image pinned by digest. The Linux
-# jobs run inside that image (identical to the local devcontainer); the macOS
-# and Windows jobs run on native runners and are the portability enforcers —
-# the container guarantees consistency, this matrix guarantees compatibility.
+# Each library repo calls this with a four-line stub. The Linux jobs run
+# inside the dev image that the calling repo pins in
+# .devcontainer/devcontainer.json (identical to the local devcontainer);
+# the macOS and Windows jobs run on native runners and are the portability
+# enforcers: the container guarantees consistency, this matrix guarantees
+# compatibility.
+#
+# The image digest lives in exactly one file per repo,
+# .devcontainer/devcontainer.json. The digest-sync job reads it there and
+# hands it to every container job, keeping CI in sync with the environment
+# a developer's editor starts from the same line. A legacy `image` input is
+# still accepted from older stubs; when given, it must equal that pin.
 #
 # Container jobs run with `--user root`: the runner's work directories belong
-# to the host runner user, and actions must write state files there — the
-# image's non-root `dev` user cannot (EACCES at checkout). Devcontainers are
-# unaffected; they select `dev` via remoteUser.
-#
-# The digest-sync job asserts that the calling repo's devcontainer (and its
-# publish stub, if present) pin the same image it passed to this workflow.
-# All pins are updated by hand, and only ever together; this turns a
-# forgotten part of that edit into a red X instead of a silently diverging
-# environment.
+# to the host runner user, and actions must write state files there, which
+# the image's non-root `dev` user cannot (EACCES at checkout). Devcontainers
+# are unaffected; they select `dev` via remoteUser.
 
 name: Library CI
 
@@ -22,8 +24,8 @@ on:
   workflow_call:
     inputs:
       image:
-        description: "Dev-environment image reference (pin by digest in the calling repo)"
-        required: true
+        description: "Legacy override; the digest is normally read from .devcontainer/devcontainer.json"
+        required: false
         type: string
 
 env:
@@ -36,36 +38,34 @@ env:
 jobs:
   digest-sync:
     runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.read.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: devcontainer pin matches CI image
+      - name: Read the image pin from devcontainer.json
+        id: read
         env:
-          CI_IMAGE: ${{ inputs.image }}
+          LEGACY_IMAGE: ${{ inputs.image }}
         # devcontainer.json is JSONC (comments allowed), so extract with sed
         # rather than a strict JSON parser.
         run: |
           devc_image=$(sed -n 's/^[[:space:]]*"image":[[:space:]]*"\([^"]*\)".*/\1/p' .devcontainer/devcontainer.json | head -n 1)
           if [[ -z "$devc_image" ]]; then
-            echo '::error file=.devcontainer/devcontainer.json::no "image" entry found — every ndof repo pins its dev environment here'
+            echo '::error file=.devcontainer/devcontainer.json::no "image" entry found - every ndof repo pins its dev environment here'
             exit 1
           fi
-          if [[ "$devc_image" != "$CI_IMAGE" ]]; then
-            echo "::error file=.devcontainer/devcontainer.json::environment pins have drifted: devcontainer.json pins $devc_image but CI was called with $CI_IMAGE — update both pins in the same commit"
+          if [[ -n "$LEGACY_IMAGE" && "$LEGACY_IMAGE" != "$devc_image" ]]; then
+            echo "::error file=.devcontainer/devcontainer.json::the image input ($LEGACY_IMAGE) differs from the devcontainer pin ($devc_image); drop the input from the stub or make them equal"
             exit 1
           fi
-          if [[ -f .github/workflows/publish.yml ]]; then
-            pub_image=$(sed -n 's/^[[:space:]]*image:[[:space:]]*\(.*\)$/\1/p' .github/workflows/publish.yml | head -n 1)
-            if [[ "$pub_image" != "$CI_IMAGE" ]]; then
-              echo "::error file=.github/workflows/publish.yml::environment pins have drifted: publish.yml pins $pub_image but CI was called with $CI_IMAGE (all pins move together)"
-              exit 1
-            fi
-          fi
-          echo "devcontainer, CI, and publish pins agree on $CI_IMAGE"
+          echo "image=$devc_image" >> "$GITHUB_OUTPUT"
+          echo "environment: $devc_image"
 
   format:
+    needs: digest-sync
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.image }}
+      image: ${{ needs.digest-sync.outputs.image }}
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,9 +74,10 @@ jobs:
         run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format --dry-run -Werror
 
   linux:
+    needs: digest-sync
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.image }}
+      image: ${{ needs.digest-sync.outputs.image }}
       options: --user root
     strategy:
       fail-fast: false
@@ -101,9 +102,10 @@ jobs:
 
   sanitize:
     name: ASan + UBSan
+    needs: digest-sync
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.image }}
+      image: ${{ needs.digest-sync.outputs.image }}
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,9 +121,10 @@ jobs:
 
   tidy:
     name: clang-tidy
+    needs: digest-sync
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.image }}
+      image: ${{ needs.digest-sync.outputs.image }}
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,9 +138,10 @@ jobs:
       - run: run-clang-tidy -p build/Debug -warnings-as-errors='*' -quiet
 
   cppcheck:
+    needs: digest-sync
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.image }}
+      image: ${{ needs.digest-sync.outputs.image }}
       options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -148,7 +152,7 @@ jobs:
           -pr:a /opt/conan/profiles/linux-clang19
           -s build_type=Debug
       - run: cmake --preset debug
-      # Second static analyzer alongside clang-tidy — different engine,
+      # Second static analyzer alongside clang-tidy: different engine,
       # different defect classes. Driven by the compile database so it
       # analyzes exactly the translation units CMake compiles.
       # --library=googletest teaches cppcheck gtest's TEST() macros; without
@@ -158,6 +162,23 @@ jobs:
           --library=googletest
           --enable=warning,style,performance,portability
           --error-exitcode=1 --quiet
+
+  package:
+    needs: digest-sync
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.digest-sync.outputs.image }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Add ndof public Conan remote
+        run: conan remote add ndof-public https://conan.cloudsmith.io/ndof-opensource/packages/ --force
+      # The one gate that exercises the Conan recipe itself: export the
+      # sources, build, run the tests, and package via cmake --install. The
+      # normal build jobs don't run conan create, so a recipe can be broken
+      # while the code is green. This job catches that before publish time.
+      - name: conan create
+        run: conan create . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Release
 
   macos:
     runs-on: macos-14 # arm64
@@ -188,7 +209,7 @@ jobs:
       - name: Add ndof public Conan remote
         run: conan remote add ndof-public https://conan.cloudsmith.io/ndof-opensource/packages/ --force
       # Force the Ninja generator: Conan's detected MSVC default is a
-      # multi-config generator, whose cmake_layout writes build/generators —
+      # multi-config generator, whose cmake_layout writes build/generators;
       # our presets expect the single-config layout (build/<Type>/generators)
       # used on every other platform.
       - run: conan install . --build=missing -s build_type=Release -s compiler.cppstd=23 -c tools.cmake.cmaketoolchain:generator=Ninja

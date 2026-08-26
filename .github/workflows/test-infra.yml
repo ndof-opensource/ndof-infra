@@ -43,17 +43,6 @@ jobs:
           # The container's dev user is uid 1000; the runner user is not.
           sudo chown -R 1000:1000 /tmp/ndof-scratch
 
-      - name: Template pins agree across devcontainer, ci, and publish stubs
-        run: |
-          d=$(grep -o 'sha256:[a-f0-9]*' template/.devcontainer/devcontainer.json)
-          c=$(grep -o 'sha256:[a-f0-9]*' template/.github/workflows/ci.yml)
-          p=$(grep -o 'sha256:[a-f0-9]*' template/.github/workflows/publish.yml)
-          if [[ "$d" != "$c" || "$d" != "$p" ]]; then
-            echo "::error::template image pins disagree: devcontainer=$d ci=$c publish=$p"
-            exit 1
-          fi
-          echo "template pins agree on $d"
-
       - name: Build and test in the image (GCC profile)
         run: |
           docker run --rm -v /tmp/ndof-scratch:/work -w /work ndof-dev:selftest bash -c '
@@ -62,6 +51,7 @@ jobs:
             cmake --preset debug
             cmake --build --preset debug
             ctest --preset debug
+            conan create . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Release
           '
 
       - name: Build, test, sanitize, and lint in the image (Clang profile)

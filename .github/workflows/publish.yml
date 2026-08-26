@@ -1,38 +1,34 @@
 # Reusable Conan publish for ndof library repositories.
 #
-# Called by a stub on version-tag pushes (v0.1.1). Builds and tests the
-# package in the pinned dev image, then uploads the recipe and sources
-# (no binaries) to the public ndof Conan remote. Consumers, including our
-# own CI, resolve the reference and compile locally via --build=missing,
-# exactly as they already do for gtest.
+# Called by a stub on version-tag pushes (v0.1.0). Exports the recipe and
+# sources from the tagged commit and uploads them (no binaries) to the
+# public ndof Conan remote. Nothing is built here: every commit on main
+# already passed the CI "package" job, which runs conan create (export,
+# build, test, install) in the pinned dev image, so this workflow needs
+# only Conan itself and runs on a plain runner.
 #
 # Publishing is tag-driven so every published version is immutable:
 # re-publishing requires a conanfile version bump and a new tag, and the
 # guard below keeps tag and conanfile version honest. The upload pattern
-# "ndof-*" is deliberate: the build cache also contains third-party
-# recipes (gtest), which must never be re-uploaded to our remote.
+# "ndof-*" is deliberate: it can never pick up third-party recipes.
 
 name: Publish Conan package
 
 on:
   workflow_call:
-    inputs:
-      image:
-        description: "Dev-environment image reference (pin by digest in the calling repo)"
-        required: true
-        type: string
     secrets:
       CLOUDSMITH_USER:
         required: true
       CLOUDSMITH_API_KEY:
         required: true
 
+env:
+  # Keep in sync with image/Dockerfile and ci.yml.
+  CONAN_VERSION: 2.9.2
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    container:
-      image: ${{ inputs.image }}
-      options: --user root
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify tag matches conanfile version
@@ -42,9 +38,13 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match conanfile version $version; bump conanfile.py and re-tag"
             exit 1
           fi
-      - name: Build and test the package
-        run: conan create . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Release
-      - name: Upload recipe and sources
+      - name: Install Conan
+        # --break-system-packages: the runner's Python is externally managed
+        # (PEP 668); the runner is ephemeral, so installing into it is fine.
+        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION"
+      - name: Export recipe and sources
+        run: conan export .
+      - name: Upload to the public remote
         env:
           CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
           CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}

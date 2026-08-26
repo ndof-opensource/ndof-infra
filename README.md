@@ -71,11 +71,13 @@ own image, your own CI pipeline, published under your own org.
 4. Make the `ndof-dev` GHCR package public (package page → settings → Danger
    Zone) so devcontainers and CI containers can pull it anonymously.
 5. Repoint the template at *your* environment: in
-   `template/.devcontainer/devcontainer.json` and
-   `template/.github/workflows/ci.yml`, replace `ndof-opensource` with your
-   org, the image digest with the one from step 3, and the workflow-ref SHA
-   with your fork's main commit. Projects stamped from then on are born
-   pinned to your environment, and Dependabot maintains the pins.
+   `template/.devcontainer/devcontainer.json`, replace `ndof-opensource`
+   with your org and the image digest with the one from step 3 (this file
+   is the only place the digest lives; CI reads it from there); in
+   `template/.github/workflows/ci.yml` and
+   `template/.github/workflows/publish.yml`, point the `uses:` lines at
+   your fork's main commit. Projects stamped from then on are born pinned
+   to your environment, and the workflow pins are bumped by hand.
 6. Make the template yours: `template/AUTHORS`, the copyright line in the
    SPDX file headers, and — if you are not shipping Apache-2.0 — `LICENSE`
    and the `license` field in `conanfile.py`. Note that the `ndof-` naming
@@ -114,13 +116,13 @@ immediately.
 
 ### Repository settings (not stampable by new-project.sh)
 
-Creating a new library using `scripts/new-project.sh` 
+Creating a new library using `scripts/new-project.sh`
 covers files, but some settings live in GitHub settings and must be set by
 hand after the first push, per library (they cannot be created/set by the script):
 
 1. **Branch ruleset on `main`**: PRs only, require branches up to date,
    and require these status checks: `ci / format`, `ci / clang-tidy`,
-   `ci / cppcheck`, `ci / digest-sync`, `ci / ASan + UBSan`,
+   `ci / cppcheck`, `ci / digest-sync`, `ci / package`, `ci / ASan + UBSan`,
    `ci / linux (linux-gcc14, Debug)`, `ci / linux (linux-gcc14, Release)`,
    `ci / linux (linux-clang19, Debug)`, `ci / linux (linux-clang19, Release)`,
    `ci / macos`, `ci / windows`.
@@ -140,5 +142,5 @@ Conan packages for the ndof libraries are served from the public remote
 `https://conan.cloudsmith.io/ndof-opensource/packages/` (anonymous read;
 see [docs/releasing.md](docs/releasing.md) for the release process).
 
-Package hosting is generously provided free of charge by 
+Package hosting is generously provided free of charge by
 [Cloudsmith](https://cloudsmith.com) under its open-source hosting program.

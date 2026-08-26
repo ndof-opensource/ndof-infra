@@ -19,8 +19,11 @@ We publish recipes and sources only, no prebuilt binaries. Every consumer
 (including our CI) builds locally via `--build=missing`, exactly as they
 already do for gtest.
 
-Packages are published only by `.github/workflows/publish.yml`, running
-in the pinned dev image on a version tag. 
+Packages are published only by `.github/workflows/publish.yml`, on a
+version tag. It builds nothing: it exports the recipe and sources from the
+tagged commit and uploads them. The build-and-test proof lives in CI's
+`package` job, which runs `conan create` on every change before it can
+reach `main`.
 
 ## Cutting a release
 
@@ -46,8 +49,8 @@ be published *next*. A never-published library carries the stamped
    created there fires the same workflow.
 
 3. The `Publish` workflow runs automatically: it verifies the tag matches
-   the conanfile version, runs `conan create` (full build and test) in
-   the pinned dev image, and uploads the recipe to `ndof-public`.
+   the conanfile version, exports the recipe and sources from the tagged
+   commit (`conan export`), and uploads them to `ndof-public`.
 4. Verify from any dev container:
 
    ```sh

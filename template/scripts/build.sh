@@ -50,6 +50,20 @@ esac
 
 cd "$(dirname "$0")/.."
 
+# Fail early, with the real cause, if the checkout is not writable. On Linux
+# hosts a bind mount preserves numeric uids: if the container user's uid
+# differs from the checkout owner's, every write fails (the first is usually
+# deep inside Conan). Devcontainer tools prevent this by remapping the
+# container user's uid to the host user's (updateRemoteUserUID); a raw
+# `docker run` or a buggy editor integration does not.
+if [[ ! -w . ]]; then
+    echo "error: $PWD is not writable by $(id -un) (uid $(id -u))" >&2
+    echo "This is usually a bind-mount uid mismatch — see the pitfalls in" >&2
+    echo "ndof-infra/docs/onboarding.md. Do not 'fix' it with chmod -R 777:" >&2
+    echo "that marks every tracked file as modified (mode changes) in git." >&2
+    exit 1
+fi
+
 # Resolve the profile: team profiles live in the dev image; on a bare host
 # fall back to Conan's auto-detected profile pinned to C++23.
 PROFILE_ARGS=()

@@ -18,7 +18,7 @@ followed by explicit pin updates there.
 ## Day one
 
 1. Install Docker (Docker Desktop or OrbStack) and clone a library repo,
-   e.g. `ndof-core-utils`.
+   e.g. `ndof-core`.
 2. Open the folder in a devcontainer-capable editor — VS Code (Dev Containers
    extension), Zed (built-in since Jan 2026), or the `devcontainer` CLI. Accept
    the "open in container" prompt. Your terminal is now inside the pinned
@@ -69,9 +69,9 @@ Conan's model:
 - A **remote** is a package server. ConanCenter (public, anonymous)
   supplies third-party packages such as gtest. The public `ndof-public`
   remote supplies the ndof libraries themselves, so
-  `requires = "ndof-core-utils/x.y.z"` resolves across repos (see
+  `requires = "ndof-core/x.y.z"` resolves across repos (see
   [releasing.md](releasing.md)). For live cross-repo editing,
-  `conan editable add ../ndof-core-utils` can be used to point your
+  `conan editable add ../ndof-core` can be used to point your
   build at a sibling checkout instead, no publishing involved.
 - Cross-compilation, when it arrives, is a profile *pair*:
   `-pr:h <target> -pr:b <build machine>` — host profile describes where

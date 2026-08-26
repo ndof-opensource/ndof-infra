@@ -73,19 +73,19 @@ In the consuming repo's `conanfile.py`:
 
 ```python
 def requirements(self):
-    self.requires("ndof-core-utils/0.1.1")
+    self.requires("ndof-core/0.1.1")
 ```
 
 Nothing else: CI adds the `ndof-public` remote in every job, and
 `scripts/build.sh` adds it locally on first run. Version bumps in
 consumers are ordinary PRs whose CI proves the chain.
 
-For live cross-repo development (e.g. editing core-utils and error together),
+For live cross-repo development (e.g. editing core and error together),
 skip the remote and point Conan at your sibling checkout:
 
 ```sh
-conan editable add ../ndof-core-utils
-conan editable remove ndof-core-utils/0.1.1   # when done
+conan editable add ../ndof-core
+conan editable remove ndof-core/0.1.1   # when done
 ```
 
 ## Cloudsmith setup notes (in case a new repository needs to be created)

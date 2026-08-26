@@ -75,7 +75,7 @@ window than C++20 — is accepted and documented in each README.
 
 ## 5. One repository per library, stamped from a shared template
 
-**Decision.** Each open-source library (`ndof-core-utils`, `ndof-callable`,
+**Decision.** Each open-source library (`ndof-core`, `ndof-callable`,
 `ndof-error`, …) is its own repository, instantiated from `template/` via
 `scripts/new-project.sh`. This repo prevents infrastructure drift: the image
 and the reusable CI workflow are *referenced by pin*, not copied; only

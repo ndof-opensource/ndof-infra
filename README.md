@@ -1,7 +1,7 @@
 # ndof-infra
 
 Version-controlled development environment and shared project infrastructure
-for the ndof framework family (`ndof-core-utils`, `ndof-callable`, `ndof-error`,
+for the ndof framework family (`ndof-core`, `ndof-callable`, `ndof-error`,
 and eventually the ndof framework itself).
 
 This repository holds the **definition** of the environment. Each project repo

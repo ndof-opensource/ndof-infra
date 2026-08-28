@@ -10,7 +10,7 @@ This repo (`ndof-infra`) holds the **definition** of the team environment: a
 Dockerfile, Conan profiles, CI logic, and a project template. Definitions are
 turned into **pinned artifacts**: the Dockerfile becomes a published container
 image identified by an immutable digest, and each project repo pins that
-digest (in `.devcontainer/devcontainer.json` and its CI stub). So every commit
+digest (in `.devcontainer/devcontainer.json`, and CI reads it from there). So every commit
 of every project records exactly which environment built it, any machine can
 reproduce it, and changing the environment is a reviewed pull request here
 followed by explicit pin updates there.
@@ -18,7 +18,7 @@ followed by explicit pin updates there.
 ## Day one
 
 1. Install Docker (Docker Desktop or OrbStack) and clone a library repo,
-   e.g. `ndof-core-utils`.
+   e.g. `ndof-core`.
 2. Open the folder in a devcontainer-capable editor — VS Code (Dev Containers
    extension), Zed (built-in since Jan 2026), or the `devcontainer` CLI. Accept
    the "open in container" prompt. Your terminal is now inside the pinned
@@ -66,12 +66,13 @@ Conan's model:
   carries the compiler choice and standard into our own build. **The profile
   is the single source of truth for the toolchain** — switching compilers is
   switching profiles, nothing else.
-- A **remote** is a package server. ConanCenter (public, anonymous) is the
-  default and currently sufficient. A private remote gets stood up at the
-  first internal release, so `requires = "ndof-core-utils/x.y.z"` resolves
-  across repos. Until then, cross-repo local development uses
-  `conan editable add ../ndof-core-utils` — point your build at a sibling
-  checkout, no publishing involved.
+- A **remote** is a package server. ConanCenter (public, anonymous)
+  supplies third-party packages such as gtest. The public `ndof-public`
+  remote supplies the ndof libraries themselves, so
+  `requires = "ndof-core/x.y.z"` resolves across repos (see
+  [releasing.md](releasing.md)). For live cross-repo editing,
+  `conan editable add ../ndof-core` can be used to point your
+  build at a sibling checkout instead, no publishing involved.
 - Cross-compilation, when it arrives, is a profile *pair*:
   `-pr:h <target> -pr:b <build machine>` — host profile describes where
   artifacts run, build profile the machine building them. Same file format,
@@ -119,39 +120,44 @@ stub in each repo. Every push and pull request runs:
 | `sanitize` | No memory errors or undefined behavior at runtime (ASan + UBSan) | `scripts/build.sh asan` |
 | `tidy` | Static-analysis clean per `.clang-tidy`, warnings as errors | `run-clang-tidy -p build/Debug -warnings-as-errors='*'` |
 | `cppcheck` | A second, independent static analyzer also finds nothing | `cppcheck --project=build/Debug/compile_commands.json --library=googletest --enable=warning,style,performance,portability --error-exitcode=1` |
+| `package` | The Conan recipe itself works: export, build, test, and install as a package | `conan create . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Release` |
 | `macos` / `windows` | Portability to AppleClang and MSVC | native runners only — CI is the arbiter |
 
 The objective of CI (**Continuous Integration**): every change is built and
 tested automatically before it lands, so integration breakage surfaces in
 minutes and quality is the default path, not a discipline. The **CD**
-(Continuous Delivery) side today is `build-image.yml`, which publishes the
-environment image on merge; automated Conan package publishing on release
-tags is planned alongside the private remote.
+(Continuous Delivery) side is `build-image.yml`, which publishes the
+environment image on merge, and `publish.yml`, which publishes a library's
+Conan package when a version tag is pushed (see
+[releasing.md](releasing.md)).
 
-## Changing the environment: the two pins and how changes propagate
+## Changing the environment: the pins and how changes propagate
 
-The environment reaches a library repo through exactly two pinned
-references, one of which appears twice:
+The environment reaches a library repo through two kinds of pinned
+reference:
 
-- **The image digest** — *which environment*: compilers, tools, Conan
-  profiles. Pinned in `.devcontainer/devcontainer.json` (what humans get)
-  and in the CI stub's `image:` input (what CI gets). The two must always
-  name the same digest; the `digest-sync` CI job fails any commit where
-  they disagree.
-- **The workflow SHA** — *which CI logic*: the jobs, their commands, the
-  gates. Pinned in the CI stub's `uses:` line.
+- **The image digest**, meaning *which environment*: compilers, tools,
+  Conan profiles. It lives in exactly one file, `.devcontainer/devcontainer.json`.
+  Your editor reads it to start the devcontainer, and the reusable CI's
+  `digest-sync` job reads the same line to choose the container for every
+  Linux job, so local and CI environments cannot disagree. Stubs carry no
+  digest.
+- **The workflow SHA**, meaning *which CI logic*: the jobs, their
+  commands, the gates. Pinned in the `uses:` line of the CI stub
+  (`.github/workflows/ci.yml`) and of the publish stub
+  (`.github/workflows/publish.yml`). GitHub requires these to be literals.
 
 `template/` in this repo carries the master copies of the same three
-references (digest ×2, SHA ×1); refreshing them is what future stamps
+references (one digest, two SHAs); refreshing them is what future stamps
 inherit.
 
 What each kind of infra change requires:
 
 | Change in ndof-infra | Produces | Re-pins required | Automated? |
 |---|---|---|---|
-| `image/Dockerfile`, `conan/profiles/` | new image digest (published by `build-image.yml` on merge) | digest, in every library (both devcontainer.json and ci.yml, one PR per repo) and in `template/` | **never** — always manual |
-| reusable `ci.yml` | new commit SHA on `main` | workflow SHA in each stub | yes — Dependabot bumps it weekly; bump manually to adopt sooner |
-| both at once (new tool + a CI job using it) | both | digest **and** SHA together, one PR per repo | no — see the ordering rule |
+| `image/Dockerfile`, `conan/profiles/` | new image digest (published by `build-image.yml` on merge) | digest, one line in every library's `.devcontainer/devcontainer.json` and in `template/`'s | **never** — always manual |
+| reusable `ci.yml` | new commit SHA on `main` | workflow SHAs in each stub (ci.yml and publish.yml) | no — manual today (Dependabot cannot track a tagless repo); automation planned |
+| both at once (new tool + a CI job using it) | both | digest **and** SHAs together, one PR per repo | no — see the ordering rule |
 | docs, `scripts/`, `template/` files | new SHA, but no library-facing behavior | none (existing repos may hand-sync template file changes if wanted) | — |
 
 What Dependabot covers:
@@ -159,10 +165,9 @@ What Dependabot covers:
 - **In this repo:** the ubuntu base line in the Dockerfile (docker
   ecosystem) and action SHA pins in our own workflows (github-actions
   ecosystem).
-- **In each library:** action SHA pins, including the reusable-workflow
-  `uses:` line. Because this repo publishes no releases, Dependabot tracks
-  the latest `main` commit — every infra merge, even docs-only, eventually
-  arrives as a bump PR, validated by the library's full CI before merge.
+- **In each library:** nothing today. The only `uses:` lines point at
+  ndof-infra, which publishes no releases, so Dependabot has no update
+  candidates; workflow SHA bumps are manual.
 
 What Dependabot never touches — always manual:
 
@@ -182,9 +187,9 @@ The image-change checklist:
 2. Merge → `build-image.yml` publishes multi-arch and prints the new
    digest; it is also available any time via
    `docker buildx imagetools inspect ghcr.io/ndof-opensource/ndof-dev:latest`.
-3. One PR per library: the digest in both files — plus the workflow SHA if
-   `ci.yml` changed. That PR's CI running green against the new pins *is*
-   the adoption test.
+3. One PR per library: the digest line in `.devcontainer/devcontainer.json`,
+   plus the workflow SHAs if the reusable workflows changed. That PR's CI
+   running green against the new pins *is* the adoption test.
 4. One PR back here refreshing `template/`'s pins the same way.
 5. Rollback = revert a pin PR. Nothing else to undo.
 
@@ -262,5 +267,5 @@ Pin digests.
 | OCI | Open Container Initiative — standards for container images (incl. the `org.opencontainers.image.*` labels baked into ours) |
 | package ID | Conan's hash of recipe + settings identifying one binary variant of a dependency |
 | profile | Conan's description of a build configuration (the ABI axes + tool configuration) |
-| remote | A Conan package server (ConanCenter public; private remote planned) |
+| remote | A Conan package server (ConanCenter for third-party packages; `ndof-public` for the ndof libraries; a private remote is planned for the private layer) |
 | SPDX | Standardized machine-readable license identifiers (`SPDX-License-Identifier: Apache-2.0` headers) |

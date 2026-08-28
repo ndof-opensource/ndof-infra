@@ -1,0 +1,54 @@
+# Reusable Conan publish for ndof library repositories.
+#
+# Called by a stub on version-tag pushes (v0.1.0). Exports the recipe and
+# sources from the tagged commit and uploads them (no binaries) to the
+# public ndof Conan remote. Nothing is built here: every commit on main
+# already passed the CI "package" job, which runs conan create (export,
+# build, test, install) in the pinned dev image, so this workflow needs
+# only Conan itself and runs on a plain runner.
+#
+# Publishing is tag-driven so every published version is immutable:
+# re-publishing requires a conanfile version bump and a new tag, and the
+# guard below keeps tag and conanfile version honest. The upload pattern
+# "ndof-*" is deliberate: it can never pick up third-party recipes.
+
+name: Publish Conan package
+
+on:
+  workflow_call:
+    secrets:
+      CLOUDSMITH_USER:
+        required: true
+      CLOUDSMITH_API_KEY:
+        required: true
+
+env:
+  # Keep in sync with image/Dockerfile and ci.yml.
+  CONAN_VERSION: 2.9.2
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify tag matches conanfile version
+        run: |
+          version=$(python3 -c "import re; print(re.search(r'version\s*=\s*\"([^\"]+)\"', open('conanfile.py').read()).group(1))")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match conanfile version $version; bump conanfile.py and re-tag"
+            exit 1
+          fi
+      - name: Install Conan
+        # --break-system-packages: the runner's Python is externally managed
+        # (PEP 668); the runner is ephemeral, so installing into it is fine.
+        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION"
+      - name: Export recipe and sources
+        run: conan export .
+      - name: Upload to the public remote
+        env:
+          CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          conan remote add ndof-public https://conan.cloudsmith.io/ndof-opensource/packages/ --force
+          conan remote login ndof-public "$CLOUDSMITH_USER" -p "$CLOUDSMITH_API_KEY"
+          conan upload "ndof-*" -r ndof-public --only-recipe --confirm

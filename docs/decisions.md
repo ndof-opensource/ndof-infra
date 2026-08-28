@@ -56,10 +56,12 @@ the same machinery scales to controlled binary storage and the audit trail
 certification evidence demands. Choosing Conan now means that requirement will
 be met by configuration, not by a tooling migration.
 
-**Consequences.** A self-hosted Conan remote (Artifactory CE or GitLab registry)
-becomes necessary at the first internal release; until then ConanCenter
-(gtest) suffices and `conan editable` covers cross-repo local development.
-The libraries themselves must remain consumable *without* Conan (see 6).
+**Consequences.** Cross-library packages resolve from the public remote
+(decision 15). A self-hosted remote (Artifactory CE or a GitLab registry)
+remains the plan for the private layer, where controlled binary storage
+and audit evidence matter. `conan editable` covers cross-repo local
+development. The libraries themselves must remain consumable *without*
+Conan (see 6).
 
 ## 4. C++23 baseline
 
@@ -73,7 +75,7 @@ window than C++20 — is accepted and documented in each README.
 
 ## 5. One repository per library, stamped from a shared template
 
-**Decision.** Each open-source library (`ndof-core-utils`, `ndof-callable`,
+**Decision.** Each open-source library (`ndof-core`, `ndof-callable`,
 `ndof-error`, …) is its own repository, instantiated from `template/` via
 `scripts/new-project.sh`. This repo prevents infrastructure drift: the image
 and the reusable CI workflow are *referenced by pin*, not copied; only
@@ -271,3 +273,53 @@ ship `details/` whenever a library creates one and already exclude
 pre-seeded into the template. Header-heavy libraries (callable, error)
 will carry most of their implementation in `details/` since template
 definitions must be visible to consumers' compilers.
+
+## 15. Public Conan remote on Cloudsmith; publishing is tag-driven and CI-only
+
+**Decision.** Libraries publish Conan packages to one public remote,
+`https://conan.cloudsmith.io/ndof-opensource/packages/` (client alias
+`ndof-public`), hosted under Cloudsmith's open-source program. Publishing
+is triggered only by a `v*` tag and performed only by the reusable
+`.github/workflows/publish.yml`: it verifies the tag matches the conanfile
+version, exports the recipe and sources from the tagged commit, and
+uploads them; no prebuilt binaries and no build. Recipe correctness is
+gated earlier, on every change, by a `package` job in the reusable CI
+that runs `conan create` (export, build, test, install) in the pinned dev
+image. Every consumer, including our CI, builds dependencies locally with
+`--build=missing`. Nothing is ever published from a workstation.
+
+**Rationale.** The first cross-library dependency (`ndof-error` on the
+core library) made a remote necessary. The alternatives were a pinned
+build-from-source script
+(no infrastructure, but a second workflow to learn and unlearn later) or
+standing up a self-hosted remote (with all of the associated overhead
+to maintain the server for limited packages and consumers).
+A hosted remote with anonymous read satisfies the
+hard constraint that public CI and fork PRs must resolve packages with no
+secrets, and Cloudsmith's open-source tier does so at no cost with
+quotas well above our recipe-only usage. Cloudsmith's terms require
+only attribution (in the README) and that we serve our own artifacts,
+which the `ndof-*` upload filter enforces mechanically. Tag-driven
+publishing makes every published version immutable: the "Verify tag
+matches conanfile version" step in publish.yml refuses a new tag
+whose conanfile version was not bumped, which would otherwise re-publish
+an existing version as a new revision, and per-library tag rulesets
+(`v*` cannot be moved or deleted; no other
+tag shape can be created) block the other route, moving an existing tag,
+at the git layer. CI-only
+publishing keeps provenance uniform (a tagged `main` commit whose
+`package` job passed, plus the publish run) and keeps the publishing
+credentials confined to GitHub's org secrets. Recipe-only publishing
+avoids a per-platform binary matrix while consumers already build from
+source for every other dependency.
+
+**Consequence.** The `version` field in `conanfile.py` names the next
+version to publish and is bumped immediately after each release. The
+image digest lives in exactly one file per repo,
+`.devcontainer/devcontainer.json`; the reusable CI reads it from there, so
+stubs carry no digest and a library has one image pin plus two workflow
+SHAs (its CI stub and its publish stub, bumped by hand until propagation
+is automated). Decision 3's self-hosted remote remains the plan for the
+private layer (decisions 7 and 11). Conan resolves against multiple
+remotes in order, so that remote will sit alongside this one rather than
+replace it.

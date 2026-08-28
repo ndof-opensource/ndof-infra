@@ -106,6 +106,15 @@ for cache in build/*/CMakeCache.txt; do
     fi
 done
 
+# Dependencies on other ndof libraries (declared with `requires` in
+# conanfile.py) are downloaded from the public ndof Conan remote, so make
+# sure Conan knows about it. Anonymous, idempotent, and harmless for a
+# library that depends on no other ndof library. Details:
+# ndof-infra/docs/releasing.md.
+if ! conan remote list | grep -q "^ndof-public:"; then
+    run conan remote add ndof-public https://conan.cloudsmith.io/ndof-opensource/packages/
+fi
+
 run conan install . --build=missing "${PROFILE_ARGS[@]}" -s build_type=$BUILD_TYPE
 mkdir -p build
 echo "$PROFILE" > build/.last-profile

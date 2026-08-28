@@ -51,6 +51,7 @@ jobs:
             cmake --preset debug
             cmake --build --preset debug
             ctest --preset debug
+            conan create . --build=missing -pr:a /opt/conan/profiles/linux-gcc14 -s build_type=Release
           '
 
       - name: Build, test, sanitize, and lint in the image (Clang profile)

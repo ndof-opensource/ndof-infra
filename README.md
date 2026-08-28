@@ -1,7 +1,7 @@
 # ndof-infra
 
 Version-controlled development environment and shared project infrastructure
-for the ndof framework family (`ndof-core-utils`, `ndof-callable`, `ndof-error`,
+for the ndof framework family (`ndof-core`, `ndof-callable`, `ndof-error`,
 and eventually the ndof framework itself).
 
 This repository holds the **definition** of the environment. Each project repo
@@ -71,11 +71,13 @@ own image, your own CI pipeline, published under your own org.
 4. Make the `ndof-dev` GHCR package public (package page → settings → Danger
    Zone) so devcontainers and CI containers can pull it anonymously.
 5. Repoint the template at *your* environment: in
-   `template/.devcontainer/devcontainer.json` and
-   `template/.github/workflows/ci.yml`, replace `ndof-opensource` with your
-   org, the image digest with the one from step 3, and the workflow-ref SHA
-   with your fork's main commit. Projects stamped from then on are born
-   pinned to your environment, and Dependabot maintains the pins.
+   `template/.devcontainer/devcontainer.json`, replace `ndof-opensource`
+   with your org and the image digest with the one from step 3 (this file
+   is the only place the digest lives; CI reads it from there); in
+   `template/.github/workflows/ci.yml` and
+   `template/.github/workflows/publish.yml`, point the `uses:` lines at
+   your fork's main commit. Projects stamped from then on are born pinned
+   to your environment, and the workflow pins are bumped by hand.
 6. Make the template yours: `template/AUTHORS`, the copyright line in the
    SPDX file headers, and — if you are not shipping Apache-2.0 — `LICENSE`
    and the `license` field in `conanfile.py`. Note that the `ndof-` naming
@@ -85,9 +87,12 @@ own image, your own CI pipeline, published under your own org.
    require branches up to date, PRs only. Your first PR
    will exercise `self-test`, which builds the image and runs the full
    pipeline against a scratch stamp — the fork validates itself.
-8. When your libraries start consuming each other as packages, stand up a
-   Conan remote (Artifactory CE or a GitLab package registry) and add
-   lockfiles.
+8. Libraries consume each other through a public Conan remote (see
+   [docs/releasing.md](docs/releasing.md)). A fork needs its own remote and
+   publishing credentials: replace the remote URL in
+   `.github/workflows/ci.yml`, `.github/workflows/publish.yml`, and
+   `template/scripts/build.sh`, and set the `CLOUDSMITH_USER` /
+   `CLOUDSMITH_API_KEY` org secrets (or their equivalents for your host).
 
 ## Local image build (optional)
 
@@ -108,3 +113,34 @@ URLs (homepage, package metadata). Environment references — image digest,
 CI workflow — are absolute and always point at the environment this repo
 publishes (decision 12); a stamp under any owner builds and tests
 immediately.
+
+### Repository settings (not stampable by new-project.sh)
+
+Creating a new library using `scripts/new-project.sh`
+covers files, but some settings live in GitHub settings and must be set by
+hand after the first push, per library (they cannot be created/set by the script):
+
+1. **Branch ruleset on `main`**: PRs only, require branches up to date,
+   and require these status checks: `ci / format`, `ci / clang-tidy`,
+   `ci / cppcheck`, `ci / digest-sync`, `ci / package`, `ci / ASan + UBSan`,
+   `ci / linux (linux-gcc14, Debug)`, `ci / linux (linux-gcc14, Release)`,
+   `ci / linux (linux-clang19, Debug)`, `ci / linux (linux-clang19, Release)`,
+   `ci / macos`, `ci / windows`.
+2. **Tag ruleset `release-tags`**: target `v*`; block force pushes and
+   restrict deletions; empty bypass list. Published versions can never be
+   moved or removed.
+3. **Tag ruleset `non-release-tags`**: target all tags excluding `v*`;
+   restrict creations. Only `v*` tags can exist, so a mistyped release tag
+   is rejected at push instead of silently publishing nothing.
+
+Org-level secrets and Dependabot need no per-repo setup: the former are
+inherited, the latter is stamped by `scripts/new-project.sh`.
+
+## Package hosting
+
+Conan packages for the ndof libraries are served from the public remote
+`https://conan.cloudsmith.io/ndof-opensource/packages/` (anonymous read;
+see [docs/releasing.md](docs/releasing.md) for the release process).
+
+Package hosting is generously provided free of charge by
+[Cloudsmith](https://cloudsmith.com) under its open-source hosting program.

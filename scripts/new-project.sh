@@ -2,7 +2,7 @@
 # Instantiate a new ndof library repository from template/.
 #
 # usage: new-project.sh <name> <description> <dest-dir> [github-owner]
-#   e.g. new-project.sh core-utils "Core utilities for ndof" ../ndof-core-utils my-org
+#   e.g. new-project.sh core "Core utilities for ndof" ../ndof-core my-org
 #
 # <name> is the short library name (lowercase, dash-separated). The script
 # derives everything else: Conan package "ndof-<name>", CMake target

@@ -1,9 +1,10 @@
 {
     "name": "ndof-__PROJECT_NAME__",
-    // Digest-pinned dev environment. NOTE: Dependabot does not scan
-    // devcontainer.json — when a ci.yml pin PR bumps the environment,
-    // update this digest in the same PR to keep local and CI identical.
-    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:7f7c7fe45686039136f1a5608a2aadd4d49a9219be9fb4706edf12399d2c348b",
+    // Digest-pinned dev environment. This line is the only place the image
+    // digest lives: your editor starts the container from it and the
+    // reusable CI reads it from here. Bumped by hand when adopting a new
+    // image; Dependabot does not scan this file.
+    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:7d33042558cbfa3b524b9f16c9740ce6df42a3694f8bd7b43895e92f207d0249",
     "remoteUser": "dev",
     // Spec default, stated explicitly because Linux hosts depend on it: at
     // create time the tool rebuilds the image with dev's uid/gid remapped to

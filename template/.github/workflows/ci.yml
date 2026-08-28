@@ -8,10 +8,6 @@ on:
 jobs:
   ci:
     # Pinned CI logic: this workflow-ref SHA is bumped by hand (Dependabot
-    # cannot track a tagless repo). The image digest lives in
-    # .devcontainer/devcontainer.json; the `with:` below is a transitional
-    # duplicate, required by the workflow at this SHA and removed once the
-    # SHA advances past the change that reads the digest from devcontainer.json.
-    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@259769e7c1944fedcf1055e29eda4531634eecf2 # main 2026-07-29
-    with:
-      image: ghcr.io/ndof-opensource/ndof-dev@sha256:7f7c7fe45686039136f1a5608a2aadd4d49a9219be9fb4706edf12399d2c348b
+    # cannot track a tagless repo). The image digest lives only in
+    # .devcontainer/devcontainer.json; CI reads it from there.
+    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@f07d8ea5f1a160413711bb60ca111f6a17efbf73 # main 2026-08-28

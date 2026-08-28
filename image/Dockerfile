@@ -6,7 +6,7 @@
 # version is pinned; changing anything here is a reviewed pull request that
 # produces a new published image digest, which project repositories then
 # adopt explicitly by updating the pin in their .devcontainer/devcontainer.json
-# and CI workflow.
+# (the only place the digest lives; CI reads it from there).
 
 # Digest-pinned so the build's only external input is explicit; Dependabot
 # (docker ecosystem) opens PRs when Canonical publishes a newer 24.04 image.

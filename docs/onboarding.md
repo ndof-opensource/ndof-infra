@@ -86,6 +86,40 @@ identical commands: `debug`, `release`, and sanitizer variants `asan`, `tsan`
 points into `build/Debug/generators/`). Each has matching build and test
 presets; `ctest` is CMake's test runner, which discovers the gtest suites.
 
+## How editor tooling fits together
+
+The chain behind code intelligence, in order:
+
+1. `conan install` (the first step of `scripts/build.sh`) generates the
+   toolchain file; `cmake --preset debug` then writes
+   `build/Debug/compile_commands.json`, the compile database recording
+   the exact command for every translation unit.
+2. **clangd**, the team language server, reads that database. It embeds
+   the Clang compiler frontend, so its diagnostics are the compiler's
+   opinion, fed by the real build's flags. The repo's `.clangd` file
+   points it at `build/Debug` (its default search never looks there) and
+   forces `-std=c++23` for brand-new headers that no compiled file
+   includes yet. Every clangd-capable editor honors `.clangd`; nothing
+   editor-specific is required for code intelligence.
+3. clangd also surfaces the checks in `.clang-tidy` inline, and
+   `.clang-format` drives formatting. Together those three files are the
+   editor-agnostic tooling config; `customizations.vscode` in
+   `devcontainer.json` carries VS Code niceties only (the cpptools
+   extension for its gdb debugger, with its own IntelliSense engine
+   disabled so clangd stays the single language-services engine).
+4. There are **two build lanes** in an IDE. The task lane
+   (Ctrl/Cmd+Shift+B, or "Tasks: Run Build Task") runs
+   `scripts/build.sh` and is the canonical path; it can never build
+   against a stale or unbootstrapped tree. The CMake-integration lane
+   ("CMake: Build", the status-bar button) calls CMake directly and only
+   works after the first `build.sh` run has generated the toolchain
+   file; on an unbootstrapped tree it fails with a one-line message
+   saying to run `build.sh`, and auto-configure on folder open is
+   disabled for the same reason.
+
+Fresh-clone rule of thumb: run `scripts/build.sh debug` once, then
+restart the language server if the editor still shows stale errors.
+
 ## Where does a new header go?
 
 Three questions, asked in order (decision 14 has the full reasoning):

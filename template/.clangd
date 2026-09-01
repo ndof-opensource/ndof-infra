@@ -4,3 +4,8 @@
 # of scripts/build.sh to exist; sanitizer presets share these flags anyway.
 CompileFlags:
   CompilationDatabase: build/Debug
+  # A brand-new header that no compiled .cpp includes yet has no database
+  # entry, and clangd's fallback parses it as C++17. Force the project
+  # standard so such headers get the right language mode. Must track the
+  # project standard (currently C++23, decision 4).
+  Add: [-std=c++23]

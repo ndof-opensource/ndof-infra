@@ -362,3 +362,71 @@ a container rebuild resets them. A stale editable entry silently
 shadows the published package, so `conan editable remove` on finishing
 is part of the procedure (`conan editable list` shows what is active);
 the full procedure lives in `docs/releasing.md`.
+
+## 17. Pin maintenance is automated by infra-side workflows with a GitHub App
+
+**Decision.** Every pin downstream of an environment or CI change is
+maintained by two workflows in this repository, each producing rolling
+force-pushed PRs that only a human merges; `main` is never pushed
+directly anywhere. `refresh-template-pins.yml` keeps this repository's
+own copies current: when `build-image.yml` completes on `main` or a
+merge changes the reusable workflows, it rewrites the digest in
+`template/.devcontainer/devcontainer.json` and
+`workspace/devcontainer.json` and the SHAs in the template stubs on the
+rolling branch `pins/refresh-template`. The digest comes from the
+`image-digest` artifact that `build-image.yml` uploads, so "pin from
+the build-image run of record" is mechanical and no mutable tag is ever
+consulted. `propagate-pins.yml` carries the pins onward: on every push
+to `main` touching the reusable `ci.yml`, the reusable `publish.yml`,
+or `template/.devcontainer/devcontainer.json` (merging the refresh PR
+is such a push), it rewrites each library's devcontainer digest and two
+stub SHAs on a rolling `pins/propagate` branch, one PR per library.
+Both authenticate as the `ndof-pins` GitHub App, installed on all four
+repositories with Contents and Pull requests write; the App ID and
+private key live in this repository's secrets (`PINS_APP_ID`,
+`PINS_APP_PRIVATE_KEY`).
+
+**Rationale.** The SHA channel was manual by necessity, not choice:
+Dependabot's github-actions updater discovers candidates through tags
+and releases of the referenced repository, and this repository
+deliberately publishes neither, so it provably never opened a bump PR
+in any library. The digest channel was manual because nothing scans
+`devcontainer.json`. Rejected alternatives: tagging infra releases
+solely to feed Dependabot (adds a versioning ceremony with no consumers
+and still leaves the digest channel uncovered); a fine-grained PAT
+instead of an App (expires on a calendar, is tied to one maintainer's
+account, and attributes automation to a person); auto-merging the
+rolling PRs (CI on them is the adoption test, but merging stays human
+by the same policy that keeps publishing CI-only, decision 15); direct
+pushes to `main` by the automation (review is the supply-chain gate,
+decision 11, and a workflow that writes its own repository's `main` can
+retrigger itself).
+
+The two channels flow differently because their referents differ in
+kind: a workflow SHA is a recipe, a digest is an artifact of one. The
+SHA a library pins is literally the reviewed merge commit itself, so
+the pin of record exists in reviewed history the instant the merge
+lands, and propagation may fire immediately. A digest names the output
+of a nondeterministic build that runs after review and executes no
+tests of its own, so the refresh PR is where that artifact's identity
+first enters a reviewed tree and first faces green checks. The
+underlying invariant is symmetric: the libraries only ever pin values
+already present in reviewed history on this repository's `main`. Git
+provides that property intrinsically for SHAs; the refresh PR
+manufactures it for digests. To be very clear on the point: the
+desire for explicit human review of all aspects of the
+infrastruture is the reason we have a two-wave PR flow for image
+updates. The PR to ndof-infra serves as the formal review of the new
+image, and only then propagates to the libraries. If this proves too
+cumbersome in the future, the decision could be re-opened and adjusted.
+
+**Consequence.** No loop exists by construction: the refresh PR touches
+neither the reusable workflows nor anything `build-image.yml` builds
+from, so merging it retriggers only propagation, and propagation writes
+only to the libraries. A mispaired bump (a SHA adopted without the
+image it needs) cannot reach any `main`: it fails the rolling PR's
+required checks and the next run force-pushes the corrected pair. A
+short-lived installation token is minted per run; nothing long-lived
+leaves the two secrets. Each workflow accepts `workflow_dispatch` from
+`main`, and if the automation is ever broken the pins remain plain
+lines editable by hand in an ordinary PR.

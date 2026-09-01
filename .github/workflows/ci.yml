@@ -72,6 +72,17 @@ jobs:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: clang-format
         run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format --dry-run -Werror
+      # The shipped implementation tier is spelled details/ (decision 14 in
+      # ndof-infra docs/decisions.md). Sibling conventions from other projects
+      # (detail/, internal/) and case variants are rejected programmatically, so a
+      # mistyped directory fails CI instead of waiting for review to notice.
+      - name: Header layout naming (decision 14)
+        run: |
+          bad=$(find include -type d \( -iname detail -o -iname internal -o \( -iname details ! -name details \) \) 2>/dev/null || true)
+          if [[ -n "$bad" ]]; then
+            echo "::error::wrong implementation-tier directory name(s): $bad. Use details/ (decision 14)."
+            exit 1
+          fi
 
   linux:
     needs: digest-sync

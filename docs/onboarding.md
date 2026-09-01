@@ -274,6 +274,17 @@ Pin digests.
   tracked file as modified (exec-bit mode changes that must not be
   committed), and container-created files still end up owned by the wrong
   uid. Fix the remapping, then re-clone if the tree was already chmodded.
+- **One checkout used from host and container makes git's status lie.**
+  Git decides "possibly modified" from cached stat data (inode, device,
+  uid, ctime) that differs between the host filesystem and the same
+  files seen through the container mount, so running git on both sides
+  of one checkout makes every tracked file show as modified with empty
+  diffs, flickering as each side refreshes the index in turn. Fix, once
+  per clone (the setting lives in `.git/config`, which both sides
+  share): `git config core.checkStat minimal` and
+  `git config core.trustctime false`, then one `git status` to settle;
+  from then on both sides judge freshness by size and mtime only, which
+  the mount reports identically.
 - **Editor code intelligence is configured by `.clangd`, and needs one
   build first.** clangd finds the compile database via the repo's `.clangd`
   file (`build/Debug` — clangd's default search never looks there). That

@@ -96,7 +96,12 @@ ndof-infra/scripts/init-workspace.sh /path/to/ndof-base
 ```
 
 Open `ndof-base/ndof.code-workspace` in your editor and reopen in the
-container; every repo is at `/workspaces/<parent-name>/<repo>`.
+container; every repo is at `/workspaces/<parent-name>/<repo>`. With
+the workspace open, Cmd/Ctrl+Shift+B lists "build (debug, active
+repo)", a workspace-scope task that runs `scripts/build.sh debug` in
+whichever repo owns the file in the active editor; the per-repo build
+tasks appear in the same picker. Eliminating use of the
+picker completely simply requires setting a personal user keybinding.
 
 The procedure, assuming `ndof-base`:
 

@@ -4,5 +4,27 @@
         { "path": "ndof-core" },
         { "path": "ndof-callable" },
         { "path": "ndof-error" }
-    ]
+    ],
+    // Each library also declares its own default build task, so with the
+    // workspace open Cmd/Ctrl+Shift+B shows a picker. This entry builds
+    // whichever repo owns the file in the active editor, so it is the
+    // one choice that is right in every repo. It fails with a clear
+    // error if the active file is in ndof-infra (no scripts/build.sh)
+    // or if no editor is focused.
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "build (debug, active repo)",
+                "type": "shell",
+                "command": "scripts/build.sh debug",
+                "options": { "cwd": "${fileWorkspaceFolder}" },
+                "group": {
+                    "kind": "build",
+                    "isDefault": true
+                },
+                "problemMatcher": ["$gcc"]
+            }
+        ]
+    }
 }

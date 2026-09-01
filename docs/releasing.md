@@ -80,13 +80,52 @@ Nothing else: CI adds the `ndof-public` remote in every job, and
 `scripts/build.sh` adds it locally on first run. Version bumps in
 consumers are ordinary PRs whose CI proves the chain.
 
-For live cross-repo development (e.g. editing core and error together),
-skip the remote and point Conan at your sibling checkout:
+## Live cross-repo development (editable mode)
+
+For editing a library and one of its ndof dependencies together (say,
+core and error), skip the remote and point Conan at your sibling
+checkout. Decision 16 has the reasoning; CI never uses editable mode.
+
+One-time setup: create a dedicated directory, conventionally
+`ndof-base`, containing only ndof repositories cloned side by side,
+then instantiate the workspace into it (the script explains itself and
+asks for confirmation):
 
 ```sh
-conan editable add ../ndof-core
-conan editable remove ndof-core/0.1.1   # when done
+ndof-infra/scripts/init-workspace.sh /path/to/ndof-base
 ```
+
+Open `ndof-base/ndof.code-workspace` in your editor and reopen in the
+container; every repo is at `/workspaces/<parent-name>/<repo>`.
+
+The procedure, assuming `ndof-base`:
+
+1. **Versions must match.** The consumer's `requires` must name the
+   version the sibling's `conanfile.py` currently carries; check with
+   `grep version /workspaces/ndof-base/ndof-core/conanfile.py`.
+2. **Build the dependency in place** (editable mode redirects lookups;
+   it builds nothing itself):
+   `cd /workspaces/ndof-base/ndof-core && scripts/build.sh debug`
+3. **Register it as editable**:
+   `conan editable add /workspaces/ndof-base/ndof-core`
+4. **Build the consumer**:
+   `cd /workspaces/ndof-base/ndof-error && scripts/build.sh debug`.
+   Its `conan install` now resolves ndof-core to the sibling checkout;
+   the output shows that instead of a download from `ndof-public`.
+5. **Iterate**: edit core, rebuild core (step 2), rebuild error
+   (step 4). Header-only changes in core still require rebuilding
+   error.
+6. **When done, always**: `conan editable remove /workspaces/ndof-base/ndof-core`
+   (the same path used in step 3; `conan editable remove --refs "ndof-core/*"`
+   removes by reference pattern instead and also works).
+   A forgotten entry silently shadows the published package in every
+   future build in that container; `conan editable list` shows what is
+   active. The registration and the Conan cache live in the container,
+   so a container rebuild also resets them (redo steps 2 and 3).
+
+Shipping is unchanged: the dependency's changes go through its own PR
+and release, and the consumer's PR bumps its `requires`; a consumer PR
+is only green once the version it names is actually published.
 
 ## Cloudsmith setup notes (in case a new repository needs to be created)
 

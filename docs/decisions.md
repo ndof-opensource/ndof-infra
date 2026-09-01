@@ -323,3 +323,42 @@ is automated). Decision 3's self-hosted remote remains the plan for the
 private layer (decisions 7 and 11). Conan resolves against multiple
 remotes in order, so that remote will sit alongside this one rather than
 replace it.
+
+## 16. Cross-repo development: editable mode in a dedicated workspace
+
+**Decision.** Live cross-repo development (editing a library and one of
+its ndof dependencies together) uses `conan editable` inside a dedicated
+workspace directory, conventionally named `ndof-base`, that contains only
+ndof repositories cloned side by side. `workspace/` in this repository
+holds the versioned workspace devcontainer and the VS Code workspace
+file; `scripts/init-workspace.sh` instantiates them into that directory
+only after an explicit confirmation, because it writes outside any
+repository and the directory it targets is bind-mounted wholesale into
+the workspace container. Single-repository devcontainers continue to
+mount only their own repository, and CI never uses editable mode.
+
+**Rationale.** The devcontainer trust boundary is "this project's
+tooling may act on this project's checkout". Mounting the parent
+directory from every library container was rejected because clone
+locations are arbitrary: a contributor who cloned into their home
+directory would hand their entire home to a container defined by a
+public repository and whatever branch they checked out. The dedicated
+directory bounds the wider mount to the ndof family by construction,
+and the confirmation gate keeps "nothing is ever written outside our
+repositories" true unless a developer explicitly opts in. Git
+submodules were rejected as the alternative mechanism: they give every
+consumer its own embedded copy of a shared dependency (duplicate
+targets at build time, one-definition-rule hazards at link time, the
+dependency's sources vendored into consumers' published packages), they
+add a second dependency mechanism beside Conan, and a change still
+needs the same two pull requests, minus version semantics. Publishing
+then consuming remains the correct flow for stable dependencies; it is
+simply too slow a loop for co-development.
+
+**Consequence.** Editable resolution requires the consumer's `requires`
+version to equal the sibling checkout's `conanfile.py` version. The
+editable registration and the Conan cache live inside the container, so
+a container rebuild resets them. A stale editable entry silently
+shadows the published package, so `conan editable remove` on finishing
+is part of the procedure (`conan editable list` shows what is active);
+the full procedure lives in `docs/releasing.md`.

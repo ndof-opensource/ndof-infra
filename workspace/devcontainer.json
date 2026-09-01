@@ -1,0 +1,24 @@
+{
+    "name": "ndof workspace",
+    // The cross-repo development container: mounts the PARENT directory it
+    // was instantiated into, so every ndof repository cloned there is
+    // visible side by side (conan editable across siblings works). Same
+    // pinned image as the library repos; refresh this copy by rerunning
+    // scripts/init-workspace.sh from ndof-infra. Not checked by CI.
+    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:7d33042558cbfa3b524b9f16c9740ce6df42a3694f8bd7b43895e92f207d0249",
+    "remoteUser": "dev",
+    "updateRemoteUserUID": true,
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools"
+            ],
+            "settings": {
+                "C_Cpp.intelliSenseEngine": "disabled",
+                "cmake.configureOnOpen": false
+            }
+        }
+    }
+}

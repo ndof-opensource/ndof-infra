@@ -1,0 +1,8 @@
+{
+    "folders": [
+        { "path": "ndof-infra" },
+        { "path": "ndof-core" },
+        { "path": "ndof-callable" },
+        { "path": "ndof-error" }
+    ]
+}

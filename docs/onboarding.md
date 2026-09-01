@@ -40,6 +40,11 @@ followed by explicit pin updates there.
 
 That is the entire onboarding. Nothing is installed on your host.
 
+For working on two ndof libraries at once (a library and its ndof
+dependency), see "Live cross-repo development" in
+[releasing.md](releasing.md); it uses a dedicated workspace directory
+instantiated by `scripts/init-workspace.sh`.
+
 ## Conan in five minutes
 
 C++ has no built-in package ecosystem, and compiled C++ libraries are only

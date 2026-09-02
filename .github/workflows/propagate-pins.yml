@@ -1,0 +1,154 @@
+# Propagates the pins of record to the library repositories.
+#
+# Both pin channels originate here: the image digest (master copy in
+# template/.devcontainer/devcontainer.json) and the reusable-workflow
+# SHA (the libraries' ci/publish stubs reference this repository by
+# commit). Dependabot can bump neither in the libraries: its
+# github-actions updater discovers candidates through tags and releases
+# of the referenced repository, and this repository publishes none, and
+# nothing scans devcontainer.json (see docs/onboarding.md, "Changing
+# the environment"). Decision 17 in docs/decisions.md.
+#
+# On every push to main that changes the reusable workflows or the
+# template image pin, each library gets its stub SHAs and devcontainer
+# digest rewritten on a rolling branch (pins/propagate, force-pushed so
+# repeated runs converge on one PR instead of stacking new ones) and a
+# PR opened if none is. The PRs are authored with a short-lived
+# installation token minted from the ndof-pins GitHub App, so each
+# library's required checks run on them; nothing merges without review.
+#
+# This workflow never writes to this repository, so it cannot trigger
+# itself; this repository's own pins are refreshed the same way by
+# refresh-template-pins.yml, whose rolling PR's merge is one of the
+# pushes that triggers this.
+# 
+# (See onboarding.md for a description and definition of "rolling PR.")
+
+name: Propagate pins
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci.yml
+      - .github/workflows/publish.yml
+      - template/.devcontainer/devcontainer.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propagate-pins
+  cancel-in-progress: false
+
+jobs:
+  propagate:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        library: [ndof-core, ndof-callable, ndof-error]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pins of record
+        id: pins
+        # The pins of record are main's; a dispatch from any other ref
+        # would propagate a SHA that review may still rewrite.
+        run: |
+          if [[ "$GITHUB_REF_NAME" != "main" ]]; then
+            echo "::error::run this from main (got $GITHUB_REF_NAME); the pins of record are main's"
+            exit 1
+          fi
+          digest=$(sed -n 's/^[[:space:]]*"image":[[:space:]]*"ghcr\.io\/ndof-opensource\/ndof-dev@\(sha256:[0-9a-f]\{64\}\)".*/\1/p' \
+            template/.devcontainer/devcontainer.json | head -n 1)
+          if [[ -z "$digest" ]]; then
+            echo '::error file=template/.devcontainer/devcontainer.json::no pinned image digest found'
+            exit 1
+          fi
+          {
+            echo "digest=$digest"
+            echo "sha=$GITHUB_SHA"
+            echo "date=$(git show -s --format=%cs "$GITHUB_SHA")"
+          } >> "$GITHUB_OUTPUT"
+          echo "propagating workflow SHA $GITHUB_SHA and image digest $digest"
+
+      - name: Mint an installation token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.PINS_APP_ID }}
+          private-key: ${{ secrets.PINS_APP_PRIVATE_KEY }}
+          owner: ndof-opensource
+          repositories: ${{ matrix.library }}
+
+      - name: Check out ${{ matrix.library }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ndof-opensource/${{ matrix.library }}
+          token: ${{ steps.app.outputs.token }}
+          path: library
+
+      - name: Rewrite the pins
+        id: rewrite
+        working-directory: library
+        env:
+          DIGEST: ${{ steps.pins.outputs.digest }}
+          SHA: ${{ steps.pins.outputs.sha }}
+          DATE: ${{ steps.pins.outputs.date }}
+        run: |
+          sed -i -E \
+            "s%(ghcr\.io/ndof-opensource/ndof-dev)@sha256:[0-9a-f]{64}%\1@${DIGEST}%" \
+            .devcontainer/devcontainer.json
+          sed -i -E \
+            "s%(ndof-opensource/ndof-infra/\.github/workflows/(ci|publish)\.yml)@[0-9a-f]{40} # main [0-9]{4}-[0-9]{2}-[0-9]{2}%\1@${SHA} # main ${DATE}%" \
+            .github/workflows/ci.yml .github/workflows/publish.yml
+          # A library whose pin lines drifted from the stub format must
+          # fail loudly here, not be skipped silently.
+          grep -qF "ndof-dev@${DIGEST}" .devcontainer/devcontainer.json
+          grep -qF "ci.yml@${SHA}" .github/workflows/ci.yml
+          grep -qF "publish.yml@${SHA}" .github/workflows/publish.yml
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pins already current; nothing to do"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff
+          fi
+
+      - name: Push the rolling branch and open the PR
+        if: steps.rewrite.outputs.changed == 'true'
+        working-directory: library
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          DIGEST: ${{ steps.pins.outputs.digest }}
+          SHA: ${{ steps.pins.outputs.sha }}
+          DATE: ${{ steps.pins.outputs.date }}
+        run: |
+          bot="${APP_SLUG}[bot]"
+          uid=$(gh api "users/${bot}" --jq '.id')
+          git config user.name "$bot"
+          git config user.email "${uid}+${bot}@users.noreply.github.com"
+          git switch -c pins/propagate
+          git add .devcontainer/devcontainer.json \
+            .github/workflows/ci.yml .github/workflows/publish.yml
+          git commit -m "Adopt the ndof-infra pins of record" \
+            -m "Workflow SHA ${SHA} (main ${DATE}); image digest ${DIGEST}."
+          git push --force origin pins/propagate
+          if [[ -z "$(gh pr list --head pins/propagate --state open --json number --jq '.[].number')" ]]; then
+            gh pr create --head pins/propagate \
+              --title "Adopt the ndof-infra pins of record" \
+              --body "Automated pin propagation from ndof-opensource/ndof-infra@${SHA}.
+
+          - reusable-workflow SHA: ${SHA} (main ${DATE})
+          - image digest: ${DIGEST}
+
+          Opened by the propagate-pins workflow in ndof-infra. This branch is
+          force-pushed to the current pins of record on every run, so the PR
+          always shows one commit against main; green required checks here are
+          the adoption test for the new pins."
+          else
+            echo "rolling PR already open; the force-push updated it"
+          fi

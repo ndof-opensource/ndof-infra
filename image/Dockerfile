@@ -32,12 +32,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# LLVM/Clang from apt.llvm.org, pinned to one major version
-RUN curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key \
-        | gpg --dearmor -o /usr/share/keyrings/llvm.gpg \
+# LLVM/Clang from apt.llvm.org, pinned to one major version. The apt
+# signing key is a committed file, not fetched at build time: a trust
+# root downloaded from the same server the packages come from verifies
+# nothing, and apt.llvm.org outages were failing builds. The expected
+# fingerprint below was cross-checked against keyserver.ubuntu.com at
+# pin time; an upstream key rotation shows up as a reviewed diff of the
+# committed key plus this constant, rather than as a silent build-time swap.
+# The index guard after apt-get update exists because Ubuntu's own
+# archive also carries clang-19: if apt.llvm.org is unreachable, apt
+# reports success anyway and the install would silently take Ubuntu's
+# older build, so an outage must fail the image build instead.
+COPY image/llvm-snapshot.gpg.key /tmp/llvm-snapshot.gpg.key
+
+# Check the committed key's fingerprint, install it as the repository
+# trust root, and register the LLVM apt source against it.
+RUN fpr=$(gpg --show-keys --with-colons /tmp/llvm-snapshot.gpg.key \
+            | awk -F: '/^fpr:/ { print $10; exit }') \
+    && if [ "$fpr" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then \
+           echo "committed LLVM key fingerprint mismatch: got $fpr" >&2; \
+           exit 1; \
+       fi \
+    && gpg --dearmor -o /usr/share/keyrings/llvm.gpg /tmp/llvm-snapshot.gpg.key \
+    && rm /tmp/llvm-snapshot.gpg.key \
     && echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_MAJOR} main" \
-        > /etc/apt/sources.list.d/llvm.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
+        > /etc/apt/sources.list.d/llvm.list
+
+# Fetch the package indexes, confirm apt.llvm.org's actually loaded,
+# install the pinned-major LLVM toolchain, and drop the index cache.
+RUN apt-get update -o Acquire::Retries=5 \
+    && if ! apt-cache policy | grep -q "apt\.llvm\.org"; then \
+           echo "apt.llvm.org index not loaded; failing instead of silently installing Ubuntu's clang" >&2; \
+           exit 1; \
+       fi \
+    && apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
         clang-${LLVM_MAJOR} clang-tools-${LLVM_MAJOR} clangd-${LLVM_MAJOR} \
         clang-format-${LLVM_MAJOR} clang-tidy-${LLVM_MAJOR} \
         lld-${LLVM_MAJOR} llvm-${LLVM_MAJOR} libclang-rt-${LLVM_MAJOR}-dev \

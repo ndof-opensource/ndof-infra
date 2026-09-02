@@ -9,7 +9,7 @@ on:
     tags: ["v*"]
 jobs:
   publish:
-    uses: ndof-opensource/ndof-infra/.github/workflows/publish.yml@f07d8ea5f1a160413711bb60ca111f6a17efbf73 # main 2026-08-28
+    uses: ndof-opensource/ndof-infra/.github/workflows/publish.yml@2777e4f4931cd5be382183aef8353fa54367f646 # main 2026-09-01
     secrets:
       CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
       CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}

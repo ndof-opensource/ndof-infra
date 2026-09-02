@@ -137,10 +137,7 @@ jobs:
           git commit -m "Refresh the template pins of record" \
             -m "Workflow SHA ${SHA} (main ${DATE}); image digest ${DIGEST}."
           git push --force origin pins/refresh-template
-          if [[ -z "$(gh pr list --head pins/refresh-template --state open --json number --jq '.[].number')" ]]; then
-            gh pr create --head pins/refresh-template \
-              --title "Refresh the template pins of record" \
-              --body "Automated template pin refresh.
+          body="Automated template pin refresh.
 
           - reusable-workflow SHA: ${SHA} (main ${DATE})
           - image digest: ${DIGEST} (from the latest successful build-image run)
@@ -149,6 +146,14 @@ jobs:
           force-pushed to the current pins of record on every run, so the PR
           always shows one commit against main. Merging it triggers
           propagate-pins.yml, which carries the same pins to the libraries."
+          if [[ -z "$(gh pr list --head pins/refresh-template --state open --json number --jq '.[].number')" ]]; then
+            gh pr create --head pins/refresh-template \
+              --title "Refresh the template pins of record" \
+              --body "$body"
           else
-            echo "rolling PR already open; the force-push updated it"
+            # A force-push moves the branch but never touches the PR
+            # description; rewrite it so the PR always describes the pins
+            # it currently carries.
+            gh pr edit pins/refresh-template --body "$body"
+            echo "rolling PR already open; branch and description refreshed"
           fi

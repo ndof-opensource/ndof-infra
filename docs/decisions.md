@@ -382,9 +382,11 @@ or `template/.devcontainer/devcontainer.json` (merging the refresh PR
 is such a push), it rewrites each library's devcontainer digest and two
 stub SHAs on a rolling `pins/propagate` branch, one PR per library.
 Both authenticate as the `ndof-pins` GitHub App, installed on all four
-repositories with Contents and Pull requests write; the App ID and
-private key live in this repository's secrets (`PINS_APP_ID`,
-`PINS_APP_PRIVATE_KEY`).
+repositories with Contents, Pull requests, and Workflows write; the
+Workflows permission exists because the library stubs the propagation
+rewrites live under `.github/workflows/`, which GitHub refuses to let
+any credential modify without it. The App ID and private key live in
+this repository's secrets (`PINS_APP_ID`, `PINS_APP_PRIVATE_KEY`).
 
 **Rationale.** The SHA channel was manual by necessity, not choice:
 Dependabot's github-actions updater discovers candidates through tags

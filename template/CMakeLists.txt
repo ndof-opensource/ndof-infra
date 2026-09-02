@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.28)
 
+# Conan generates the toolchain file this project is configured with. When a
+# tool (an IDE's CMake integration, a bare cmake invocation) configures an
+# unbootstrapped tree, fail with the fix instead of three cryptic errors.
+if(CMAKE_TOOLCHAIN_FILE AND NOT EXISTS "${CMAKE_TOOLCHAIN_FILE}")
+    message(FATAL_ERROR
+        "Conan has not generated ${CMAKE_TOOLCHAIN_FILE} yet. Run "
+        "scripts/build.sh debug (or: conan install . --build=missing) first. "
+        "See this repository's README, or the ndof-infra onboarding guide.")
+endif()
+
 project(ndof-__PROJECT_NAME__
     VERSION 0.1.0
     DESCRIPTION "__PROJECT_DESCRIPTION__"

@@ -1,0 +1,154 @@
+# Refreshes this repository's own pins of record via a rolling PR.
+#
+# Two events make the template's pins stale: build-image.yml publishing
+# a new image digest (master copies in
+# template/.devcontainer/devcontainer.json and workspace/devcontainer.json),
+# and a merge changing the reusable workflows (the template stubs pin
+# them by commit SHA). This workflow fires on both, rewrites all four
+# pin locations to the pins of record, and maintains one rolling PR
+# (branch pins/refresh-template, force-pushed so repeated runs converge
+# on a single PR). The digest comes from the image-digest artifact of
+# the latest successful build-image run, the run of record, never from
+# a mutable tag. Decision 17.
+#
+# The PR is authored with a short-lived installation token from the
+# ndof-pins GitHub App so CI runs on it; nothing merges without review.
+# Merging it cannot retrigger this workflow (the PR touches neither the
+# reusable workflows nor anything build-image.yml builds from); it does
+# trigger propagate-pins.yml, which carries the same pins onward to the
+# library repositories.
+
+name: Refresh template pins
+
+on:
+  workflow_run:
+    workflows: ["Build and publish dev image"]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ci.yml
+      - .github/workflows/publish.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: refresh-template-pins
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    # For the workflow_run trigger, act only on successful image builds.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Mint an installation token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.PINS_APP_ID }}
+          private-key: ${{ secrets.PINS_APP_PRIVATE_KEY }}
+          owner: ndof-opensource
+          repositories: ndof-infra
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Read the pins of record
+        id: pins
+        env:
+          # The artifact query needs actions:read, which the App does not
+          # have; use the workflow's own token here.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          date=$(git show -s --format=%cs HEAD)
+          run_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/build-image.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          digest=""
+          if [[ -n "$run_id" ]] && gh run download "$run_id" -n image-digest --dir "$RUNNER_TEMP/image-digest"; then
+            digest=$(tr -d '[:space:]' < "$RUNNER_TEMP/image-digest/digest.txt")
+          else
+            digest=$(sed -n 's/^[[:space:]]*"image":[[:space:]]*"ghcr\.io\/ndof-opensource\/ndof-dev@\(sha256:[0-9a-f]\{64\}\)".*/\1/p' \
+              template/.devcontainer/devcontainer.json | head -n 1)
+            echo "::warning::no image-digest artifact on the latest successful build-image run (pre-artifact run, or expired after 90 days); keeping the current template digest $digest"
+          fi
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::no usable image digest (got '$digest'); run build-image.yml, or fix the template pin by hand"
+            exit 1
+          fi
+          {
+            echo "digest=$digest"
+            echo "sha=$sha"
+            echo "date=$date"
+          } >> "$GITHUB_OUTPUT"
+          echo "pins of record: workflow SHA $sha, image digest $digest"
+
+      - name: Rewrite the pins
+        id: rewrite
+        env:
+          DIGEST: ${{ steps.pins.outputs.digest }}
+          SHA: ${{ steps.pins.outputs.sha }}
+          DATE: ${{ steps.pins.outputs.date }}
+        run: |
+          sed -i -E \
+            "s%(ghcr\.io/ndof-opensource/ndof-dev)@sha256:[0-9a-f]{64}%\1@${DIGEST}%" \
+            template/.devcontainer/devcontainer.json workspace/devcontainer.json
+          sed -i -E \
+            "s%(ndof-opensource/ndof-infra/\.github/workflows/(ci|publish)\.yml)@[0-9a-f]{40} # main [0-9]{4}-[0-9]{2}-[0-9]{2}%\1@${SHA} # main ${DATE}%" \
+            template/.github/workflows/ci.yml template/.github/workflows/publish.yml
+          # A pin line that drifted from the expected format must fail
+          # loudly here, not be skipped silently.
+          grep -qF "ndof-dev@${DIGEST}" template/.devcontainer/devcontainer.json
+          grep -qF "ndof-dev@${DIGEST}" workspace/devcontainer.json
+          grep -qF "ci.yml@${SHA}" template/.github/workflows/ci.yml
+          grep -qF "publish.yml@${SHA}" template/.github/workflows/publish.yml
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "pins already current; nothing to do"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff
+          fi
+
+      - name: Push the rolling branch and open the PR
+        if: steps.rewrite.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          DIGEST: ${{ steps.pins.outputs.digest }}
+          SHA: ${{ steps.pins.outputs.sha }}
+          DATE: ${{ steps.pins.outputs.date }}
+        run: |
+          bot="${APP_SLUG}[bot]"
+          uid=$(gh api "users/${bot}" --jq '.id')
+          git config user.name "$bot"
+          git config user.email "${uid}+${bot}@users.noreply.github.com"
+          git switch -c pins/refresh-template
+          git add template/.devcontainer/devcontainer.json workspace/devcontainer.json \
+            template/.github/workflows/ci.yml template/.github/workflows/publish.yml
+          git commit -m "Refresh the template pins of record" \
+            -m "Workflow SHA ${SHA} (main ${DATE}); image digest ${DIGEST}."
+          git push --force origin pins/refresh-template
+          if [[ -z "$(gh pr list --head pins/refresh-template --state open --json number --jq '.[].number')" ]]; then
+            gh pr create --head pins/refresh-template \
+              --title "Refresh the template pins of record" \
+              --body "Automated template pin refresh.
+
+          - reusable-workflow SHA: ${SHA} (main ${DATE})
+          - image digest: ${DIGEST} (from the latest successful build-image run)
+
+          Opened by the refresh-template-pins workflow. This branch is
+          force-pushed to the current pins of record on every run, so the PR
+          always shows one commit against main. Merging it triggers
+          propagate-pins.yml, which carries the same pins to the libraries."
+          else
+            echo "rolling PR already open; the force-push updated it"
+          fi

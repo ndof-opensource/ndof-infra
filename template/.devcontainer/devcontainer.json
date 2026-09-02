@@ -18,8 +18,17 @@
         "vscode": {
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
-                "ms-vscode.cmake-tools"
-            ]
+                "ms-vscode.cmake-tools",
+                // Debugger (gdb) only
+                "ms-vscode.cpptools"
+            ],
+            "settings": {
+                "C_Cpp.intelliSenseEngine": "disabled",
+                // Do not auto-configure on folder open: a fresh clone has no
+                // Conan-generated toolchain file until scripts/build.sh runs,
+                // and the auto-configure would fail against it.
+                "cmake.configureOnOpen": false
+            }
         }
     }
 }

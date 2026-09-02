@@ -40,6 +40,11 @@ followed by explicit pin updates there.
 
 That is the entire onboarding. Nothing is installed on your host.
 
+For working on two ndof libraries at once (a library and its ndof
+dependency), see "Live cross-repo development" in
+[releasing.md](releasing.md); it uses a dedicated workspace directory
+instantiated by `scripts/init-workspace.sh`.
+
 ## Conan in five minutes
 
 C++ has no built-in package ecosystem, and compiled C++ libraries are only
@@ -85,6 +90,40 @@ identical commands: `debug`, `release`, and sanitizer variants `asan`, `tsan`
 (these deliberately reuse the *Debug* Conan install — their toolchain file
 points into `build/Debug/generators/`). Each has matching build and test
 presets; `ctest` is CMake's test runner, which discovers the gtest suites.
+
+## How editor tooling fits together
+
+The chain behind code intelligence, in order:
+
+1. `conan install` (the first step of `scripts/build.sh`) generates the
+   toolchain file; `cmake --preset debug` then writes
+   `build/Debug/compile_commands.json`, the compile database recording
+   the exact command for every translation unit.
+2. **clangd**, the team language server, reads that database. It embeds
+   the Clang compiler frontend, so its diagnostics are the compiler's
+   opinion, fed by the real build's flags. The repo's `.clangd` file
+   points it at `build/Debug` (its default search never looks there) and
+   forces `-std=c++23` for brand-new headers that no compiled file
+   includes yet. Every clangd-capable editor honors `.clangd`; nothing
+   editor-specific is required for code intelligence.
+3. clangd also surfaces the checks in `.clang-tidy` inline, and
+   `.clang-format` drives formatting. Together those three files are the
+   editor-agnostic tooling config; `customizations.vscode` in
+   `devcontainer.json` carries VS Code niceties only (the cpptools
+   extension for its gdb debugger, with its own IntelliSense engine
+   disabled so clangd stays the single language-services engine).
+4. There are **two build lanes** in an IDE. The task lane
+   (Ctrl/Cmd+Shift+B, or "Tasks: Run Build Task") runs
+   `scripts/build.sh` and is the canonical path; it can never build
+   against a stale or unbootstrapped tree. The CMake-integration lane
+   ("CMake: Build", the status-bar button) calls CMake directly and only
+   works after the first `build.sh` run has generated the toolchain
+   file; on an unbootstrapped tree it fails with a one-line message
+   saying to run `build.sh`, and auto-configure on folder open is
+   disabled for the same reason.
+
+Fresh-clone rule of thumb: run `scripts/build.sh debug` once, then
+restart the language server if the editor still shows stale errors.
 
 ## Where does a new header go?
 
@@ -148,32 +187,100 @@ reference:
   (`.github/workflows/publish.yml`). GitHub requires these to be literals.
 
 `template/` in this repo carries the master copies of the same three
-references (one digest, two SHAs); refreshing them is what future stamps
-inherit.
+references (one digest, two SHAs), and `workspace/devcontainer.json`
+carries a fourth copy of the digest for the cross-repo workspace;
+refreshing them is what future stamps inherit, and the template digest
+is the pin of record that propagation distributes to the existing
+libraries.
 
 What each kind of infra change requires:
 
 | Change in ndof-infra | Produces | Re-pins required | Automated? |
 |---|---|---|---|
-| `image/Dockerfile`, `conan/profiles/` | new image digest (published by `build-image.yml` on merge) | digest, one line in every library's `.devcontainer/devcontainer.json` and in `template/`'s | **never** — always manual |
-| reusable `ci.yml` | new commit SHA on `main` | workflow SHAs in each stub (ci.yml and publish.yml) | no — manual today (Dependabot cannot track a tagless repo); automation planned |
-| both at once (new tool + a CI job using it) | both | digest **and** SHAs together, one PR per repo | no — see the ordering rule |
+| `image/Dockerfile`, `conan/profiles/` | new image digest (published by `build-image.yml` on merge) | digest, one line in every library's `.devcontainer/devcontainer.json`, in `template/`'s, and in `workspace/devcontainer.json` | yes: `refresh-template-pins.yml` here, then `propagate-pins.yml` in the libraries |
+| reusable `ci.yml` | new commit SHA on `main` | workflow SHAs in each stub (ci.yml and publish.yml), and in `template/`'s stubs | yes, the same two workflows |
+| both at once (new tool + a CI job using it) | both | digest **and** SHAs together, one PR per repo | yes; the rolling PR carries both, so the pairing is automatic |
 | docs, `scripts/`, `template/` files | new SHA, but no library-facing behavior | none (existing repos may hand-sync template file changes if wanted) | — |
+
+The automation (decision 17) is two workflows in this repo, each
+maintaining rolling force-pushed PRs that a human merges:
+
+- `refresh-template-pins.yml` keeps this repo's own pins current: when
+  `build-image.yml` completes on `main` (the digest comes from that
+  run's `image-digest` artifact, the run of record, never from a
+  mutable tag) or a merge changes the reusable workflows, it opens or
+  updates one rolling PR (branch `pins/refresh-template`) rewriting the
+  template digest, the `workspace/devcontainer.json` digest, and the
+  template stub SHAs.
+- `propagate-pins.yml` carries the pins onward: on every push to `main`
+  that touches the reusable `ci.yml`, the reusable `publish.yml`, or
+  `template/.devcontainer/devcontainer.json` (which is what merging the
+  refresh PR does), it rewrites each library's two stub SHAs and
+  devcontainer digest and maintains one rolling PR per library (branch
+  `pins/propagate`).
+
+Both authenticate as the `ndof-pins` GitHub App (installed on all four
+repos; ID and key are this repo's `PINS_APP_ID` / `PINS_APP_PRIVATE_KEY`
+secrets), so CI runs on every PR they open; merging stays a human
+decision, `main` is never pushed directly, and neither workflow's PR
+can retrigger the workflow that opened it. A `workflow_dispatch` run
+from `main` drives either by hand.
+
+**"Rolling" PR** means each workflow maintains one long-lived branch
+with at most one open PR: the branch name is fixed, a PR is opened only
+if none is open for it, and every run force-pushes the branch to the
+current pins of record, superseding whatever it held before. If three
+infra merges land before anyone reviews, there are not three stacked
+pin PRs per repo but one, whose single commit reflects the latest pins.
+This is safe because a pin bump has no intermediate history worth
+preserving: only the end state matters, and the merge into `main` is
+the durable record. It is also self-healing: a PR that fails CI (say, a
+SHA arriving ahead of the image it needs) is simply overwritten by the
+next run's corrected contents. After a merge the branch lies dormant
+until the next change starts the cycle again under the same name.
+The corollary: the `pins/*` branches are machine-owned. Never commit to
+them by hand; the next run overwrites them without looking. A human
+fixing pins by hand uses an ordinary branch and PR, which the
+automation never touches.
+
+The full flow, from one merge to ndof-infra to every pin being current
+(GitHub renders this as a diagram):
+
+```mermaid
+flowchart TD
+    M["merge to ndof-infra main"] --> Q1{"touches image/,<br/>conan/profiles/, or<br/>build-image.yml?"}
+    M --> Q2{"touches the reusable<br/>ci.yml or publish.yml?"}
+    Q1 -->|yes| BI["build-image.yml:<br/>build and publish the image,<br/>upload the image-digest artifact"]
+    BI -->|"workflow_run,<br/>on success"| RT["refresh-template-pins.yml:<br/>rolling infra PR (pins/refresh-template)<br/>rewriting the template digest, the<br/>workspace digest, and both template<br/>stub SHAs"]
+    Q2 -->|yes| RT
+    Q2 -->|yes| PP["propagate-pins.yml:<br/>one rolling PR per library (pins/propagate)<br/>rewriting the devcontainer digest<br/>and both stub SHAs"]
+    RT -->|"human merges; the merge touches<br/>template/.devcontainer/devcontainer.json"| PP
+    PP -->|"human merges each library PR;<br/>green required checks are the adoption test"| DONE["all pins current"]
+```
+
+(The arrow from the refresh PR's merge into `propagate-pins.yml`
+exists only when the digest actually moved. A reusable-workflow-only
+change reaches the libraries through the direct arrow from the
+reusable-workflow question, without waiting on the refresh PR, which
+then updates just the template stubs, whose merge triggers nothing
+further.)
 
 What Dependabot covers:
 
 - **In this repo:** the ubuntu base line in the Dockerfile (docker
   ecosystem) and action SHA pins in our own workflows (github-actions
   ecosystem).
-- **In each library:** nothing today. The only `uses:` lines point at
+- **In each library:** nothing. The only `uses:` lines point at
   ndof-infra, which publishes no releases, so Dependabot has no update
-  candidates; workflow SHA bumps are manual.
+  candidates; the bumps arrive via `propagate-pins.yml` instead.
 
-What Dependabot never touches — always manual:
+What Dependabot never touches:
 
-- **The image digest, in either file.** Nothing scans `devcontainer.json`,
-  and the stub's `image:` input is an opaque string to it. This is the one
-  pin that silently rots if forgotten — which is why `digest-sync` exists.
+- **The image digest.** Nothing scans `devcontainer.json`, so this is
+  the pin that would silently rot if forgotten (which is why
+  `digest-sync` exists). The `template/` and workspace copies ride the
+  rolling `refresh-template-pins.yml` PR; the library copies ride the
+  rolling `propagate-pins.yml` PRs.
 - The `env:` tool versions in the reusable `ci.yml` (Conan/CMake/Ninja for
   the native macOS/Windows jobs) — kept matching the Dockerfile by hand,
   in the same PR that changes the Dockerfile.
@@ -184,21 +291,26 @@ The image-change checklist:
 1. PR to this repo changing `image/Dockerfile` (and `ci.yml` in the same
    PR, if the change adds a gate). `test-infra.yml` builds and exercises
    the candidate image before merge.
-2. Merge → `build-image.yml` publishes multi-arch and prints the new
-   digest; it is also available any time via
-   `docker buildx imagetools inspect ghcr.io/ndof-opensource/ndof-dev:latest`.
-3. One PR per library: the digest line in `.devcontainer/devcontainer.json`,
-   plus the workflow SHAs if the reusable workflows changed. That PR's CI
-   running green against the new pins *is* the adoption test.
-4. One PR back here refreshing `template/`'s pins the same way.
+2. Merge → `build-image.yml` publishes multi-arch, prints the new
+   digest, and uploads it as the run's `image-digest` artifact.
+3. Its completion triggers `refresh-template-pins.yml`, which opens (or
+   updates) the rolling PR here bumping the template digest, the
+   workspace digest, and the template stub SHAs. Review and merge it.
+4. That merge triggers `propagate-pins.yml`, which force-pushes one
+   rolling PR per library carrying the digest and stub SHAs together.
+   That PR's CI running green against the new pins *is* the adoption
+   test; review and merge each one.
 5. Rollback = revert a pin PR. Nothing else to undo.
 
 **Ordering rule.** When a `ci.yml` change depends on an image change (a
-new job invoking a tool only the new image contains), never adopt the SHA
-without the digest. Do the paired bumps promptly after publish; if
-Dependabot's weekly SHA-only bump arrives first, it fails loudly in that
-library ("command not found") — push the digest bump onto that PR's
-branch, or close it and open the paired PR.
+new job invoking a tool only the new image contains), merge them
+together and expect a brief red window: propagation fires immediately
+with the new SHA and the old digest, so the library rolling PRs fail
+loudly ("command not found") while the image still builds. Once
+`build-image.yml` completes and the refresh PR merges here, the next
+propagation run force-pushes the corrected pair onto those same PRs and
+they heal. Nothing mispaired can reach a library's `main`, because the
+red checks block the merge.
 
 Tags like `:latest` are conveniences that move; digests are immutable facts.
 Pin digests.
@@ -235,6 +347,17 @@ Pin digests.
   tracked file as modified (exec-bit mode changes that must not be
   committed), and container-created files still end up owned by the wrong
   uid. Fix the remapping, then re-clone if the tree was already chmodded.
+- **One checkout used from host and container makes git's status lie.**
+  Git decides "possibly modified" from cached stat data (inode, device,
+  uid, ctime) that differs between the host filesystem and the same
+  files seen through the container mount, so running git on both sides
+  of one checkout makes every tracked file show as modified with empty
+  diffs, flickering as each side refreshes the index in turn. Fix, once
+  per clone (the setting lives in `.git/config`, which both sides
+  share): `git config core.checkStat minimal` and
+  `git config core.trustctime false`, then one `git status` to settle;
+  from then on both sides judge freshness by size and mtime only, which
+  the mount reports identically.
 - **Editor code intelligence is configured by `.clangd`, and needs one
   build first.** clangd finds the compile database via the repo's `.clangd`
   file (`build/Debug` — clangd's default search never looks there). That

@@ -72,6 +72,17 @@ jobs:
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: clang-format
         run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format --dry-run -Werror
+      # The shipped implementation tier is spelled details/ (decision 14 in
+      # ndof-infra docs/decisions.md). Sibling conventions from other projects
+      # (detail/, internal/) and case variants are rejected programmatically, so a
+      # mistyped directory fails CI instead of waiting for review to notice.
+      - name: Header layout naming (decision 14)
+        run: |
+          bad=$(find include -type d \( -iname detail -o -iname internal -o \( -iname details ! -name details \) \) 2>/dev/null || true)
+          if [[ -n "$bad" ]]; then
+            echo "::error::wrong implementation-tier directory name(s): $bad. Use details/ (decision 14)."
+            exit 1
+          fi
 
   linux:
     needs: digest-sync
@@ -185,11 +196,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned tools
-        # --break-system-packages: the runner's Python is externally managed
-        # (PEP 668). No --user: its script dir is not on the runner's PATH,
-        # so tools would install but not be findable. The runner is ephemeral;
-        # installing into its Python prefix is fine and matches Windows.
-        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
+        # Into a venv on the PATH, mirroring the dev image's /opt/toolchain:
+        # no PEP 668 override needed, and the same shape as Windows.
+        # GITHUB_PATH takes effect from the next step onward.
+        run: |
+          python3 -m venv "$HOME/toolchain"
+          "$HOME/toolchain/bin/pip" install "conan==$CONAN_VERSION" "cmake==$CMAKE_VERSION" "ninja==$NINJA_VERSION"
+          echo "$HOME/toolchain/bin" >> "$GITHUB_PATH"
       - run: conan profile detect --force
       - name: Add ndof public Conan remote
         run: conan remote add ndof-public https://conan.cloudsmith.io/ndof-opensource/packages/ --force
@@ -203,7 +216,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned tools
-        run: python -m pip install "conan==$env:CONAN_VERSION" "cmake==$env:CMAKE_VERSION" "ninja==$env:NINJA_VERSION"
+        # Into a venv on the PATH, matching the macOS job; on Windows the
+        # venv's executables live in Scripts, not bin.
+        run: |
+          python -m venv "$env:USERPROFILE\toolchain"
+          & "$env:USERPROFILE\toolchain\Scripts\pip.exe" install "conan==$env:CONAN_VERSION" "cmake==$env:CMAKE_VERSION" "ninja==$env:NINJA_VERSION"
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\toolchain\Scripts"
       - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
       - run: conan profile detect --force
       - name: Add ndof public Conan remote

@@ -39,9 +39,12 @@ jobs:
             exit 1
           fi
       - name: Install Conan
-        # --break-system-packages: the runner's Python is externally managed
-        # (PEP 668); the runner is ephemeral, so installing into it is fine.
-        run: python3 -m pip install --break-system-packages "conan==$CONAN_VERSION"
+        # Into a venv on the PATH, like the CI native jobs; no PEP 668
+        # override needed. GITHUB_PATH takes effect from the next step.
+        run: |
+          python3 -m venv "$HOME/toolchain"
+          "$HOME/toolchain/bin/pip" install "conan==$CONAN_VERSION"
+          echo "$HOME/toolchain/bin" >> "$GITHUB_PATH"
       - name: Export recipe and sources
         run: conan export .
       - name: Upload to the public remote

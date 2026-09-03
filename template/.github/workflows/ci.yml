@@ -12,4 +12,4 @@ jobs:
     # workflows or the image pin change (Dependabot cannot track a tagless
     # repo). The image digest lives only in .devcontainer/devcontainer.json;
     # CI reads it from there.
-    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@2777e4f4931cd5be382183aef8353fa54367f646 # main 2026-09-01
+    uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@6e0041b44f6bfb3c6e18fa519b5a2704cbaaddc4 # main 2026-09-03

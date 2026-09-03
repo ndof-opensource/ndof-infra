@@ -5,7 +5,7 @@
     // reusable CI reads it from here. Maintained by ndof-infra's
     // propagate-pins workflow, which opens a PR here when a new image is
     // adopted; Dependabot does not scan this file.
-    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:1f9fe6a18d09bbee586c0a9ca0d8b4c589c3fb229a3fe425cbff8dc69dbc3dce",
+    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:fd12b770aa426f399ce91b666b56e57a4eb24b12bff014ca306e53147e36cff8",
     "remoteUser": "dev",
     // Spec default, stated explicitly because Linux hosts depend on it: at
     // create time the tool rebuilds the image with dev's uid/gid remapped to

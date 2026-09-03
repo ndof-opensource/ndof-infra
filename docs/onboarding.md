@@ -243,6 +243,18 @@ them by hand; the next run overwrites them without looking. A human
 fixing pins by hand uses an ordinary branch and PR, which the
 automation never touches.
 
+One expected cosmetic quirk: the template stubs' SHA always lags the
+libraries' by the refresh PR's own merge, because a commit cannot
+contain its own hash; the refresh PR writes the newest SHA that exists
+when it runs, and its merge then creates a newer one, which is what
+propagation stamps into the libraries. The gap is harmless by
+construction: any commit that changed the reusable workflows would
+have re-fired propagation with its own SHA, so the commits between the
+two pins never materially affect *the workflows we are trying to pin*.
+(In other words, the workflows themselves are always identical between
+these two seemingly different commits, though other files that do
+not trigger the automation could differ, harmlessly.)
+
 The full flow, from one merge to ndof-infra to every pin being current
 (GitHub renders this as a diagram):
 

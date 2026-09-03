@@ -318,8 +318,8 @@ version to publish and is bumped immediately after each release. The
 image digest lives in exactly one file per repo,
 `.devcontainer/devcontainer.json`; the reusable CI reads it from there, so
 stubs carry no digest and a library has one image pin plus two workflow
-SHAs (its CI stub and its publish stub, bumped by hand until propagation
-is automated). Decision 3's self-hosted remote remains the plan for the
+SHAs (its CI stub and its publish stub, maintained by propagation,
+decision 17). Decision 3's self-hosted remote remains the plan for the
 private layer (decisions 7 and 11). Conan resolves against multiple
 remotes in order, so that remote will sit alongside this one rather than
 replace it.

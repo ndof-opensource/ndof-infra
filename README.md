@@ -28,15 +28,16 @@ it, and any developer on any machine can reproduce it.
    Dockerfile). Review happens here, once, for the whole team.
 2. On merge, `build-image.yml` publishes a new multi-arch image to
    `ghcr.io/<owner>/ndof-dev` and prints its immutable digest.
-3. Each project repo adopts the change explicitly by updating the digest pin in
-   its `.devcontainer/devcontainer.json` and CI workflow (automatable with
-   Dependabot/Renovate). Projects can adopt at different times; the pin makes
-   drift explicit instead of accidental.
+3. Each project repo adopts the change explicitly by merging the pin-update
+   PR that this repo's `propagate-pins.yml` workflow opens against it (the
+   digest lives only in `.devcontainer/devcontainer.json`; CI reads it from
+   there). Projects can adopt at different times by accepting or rejecting
+   that PR; the pin makes drift explicit instead of accidental.
 4. Rollback = revert the pin.
 
 The same pattern applies to CI logic: project workflows are ~10-line stubs
-calling the reusable `ci.yml` here by ref. Fix CI once, every repo gets it on
-its next ref bump.
+calling the reusable `ci.yml` here by ref. Fix CI once; propagation opens
+the ref-bump PR in every repo.
 
 ## Design decisions (agreed 2026-07)
 
@@ -77,7 +78,10 @@ own image, your own CI pipeline, published under your own org.
    `template/.github/workflows/ci.yml` and
    `template/.github/workflows/publish.yml`, point the `uses:` lines at
    your fork's main commit. Projects stamped from then on are born pinned
-   to your environment, and the workflow pins are bumped by hand.
+   to your environment, and the pin workflows (`refresh-template-pins.yml`,
+   `propagate-pins.yml`) keep every pin current once you have created the
+   GitHub App they authenticate as; see "Changing the environment" in
+   `docs/onboarding.md` and decision 17.
 6. Make the template yours: `template/AUTHORS`, the copyright line in the
    SPDX file headers, and — if you are not shipping Apache-2.0 — `LICENSE`
    and the `license` field in `conanfile.py`. Note that the `ndof-` naming

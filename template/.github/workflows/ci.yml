@@ -7,7 +7,9 @@ on:
 
 jobs:
   ci:
-    # Pinned CI logic: this workflow-ref SHA is bumped by hand (Dependabot
-    # cannot track a tagless repo). The image digest lives only in
-    # .devcontainer/devcontainer.json; CI reads it from there.
+    # Pinned CI logic: this workflow-ref SHA is maintained by ndof-infra's
+    # propagate-pins workflow, which opens a PR here whenever the reusable
+    # workflows or the image pin change (Dependabot cannot track a tagless
+    # repo). The image digest lives only in .devcontainer/devcontainer.json;
+    # CI reads it from there.
     uses: ndof-opensource/ndof-infra/.github/workflows/ci.yml@2777e4f4931cd5be382183aef8353fa54367f646 # main 2026-09-01

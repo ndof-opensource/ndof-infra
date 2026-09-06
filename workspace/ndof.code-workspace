@@ -3,7 +3,8 @@
         { "path": "ndof-infra" },
         { "path": "ndof-core" },
         { "path": "ndof-callable" },
-        { "path": "ndof-error" }
+        { "path": "ndof-error" },
+        { "path": "ndof-patterns" }
     ],
     // Each library also declares its own default build task, so with the
     // workspace open Cmd/Ctrl+Shift+B shows a picker. This entry builds

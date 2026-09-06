@@ -219,12 +219,12 @@ maintaining rolling force-pushed PRs that a human merges:
   devcontainer digest and maintains one rolling PR per library (branch
   `pins/propagate`).
 
-Both authenticate as the `ndof-pins` GitHub App (installed on all four
-repos; ID and key are this repo's `PINS_APP_ID` / `PINS_APP_PRIVATE_KEY`
-secrets), so CI runs on every PR they open; merging stays a human
-decision, `main` is never pushed directly, and neither workflow's PR
-can retrigger the workflow that opened it. A `workflow_dispatch` run
-from `main` drives either by hand.
+Both authenticate as the `ndof-pins` GitHub App (installed on every
+ndof repository, this one and each library; ID and key are this repo's
+`PINS_APP_ID` / `PINS_APP_PRIVATE_KEY` secrets), so CI runs on every
+PR they open; merging stays a human decision, `main` is never pushed
+directly, and neither workflow's PR can retrigger the workflow that
+opened it. A `workflow_dispatch` run from `main` drives either by hand.
 
 **"Rolling" PR** means each workflow maintains one long-lived branch
 with at most one open PR: the branch name is fixed, a PR is opened only

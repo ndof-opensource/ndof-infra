@@ -69,22 +69,73 @@ deletions blocked) makes a published tag unmovable server-side.
 
 ## Consuming a released library
 
-In the consuming repo's `conanfile.py`:
+Wiring one ndof library into another takes one edit in each of three
+files in the consuming library, using core-into-error as the example:
 
-```python
-def requirements(self):
-    self.requires("ndof-core/0.1.1")
-```
+1. `conanfile.py`: declare the dependency.
 
-Nothing else: CI adds the `ndof-public` remote in every job, and
-`scripts/build.sh` adds it locally on first run. Version bumps in
-consumers are ordinary PRs whose CI proves the chain.
+   ```python
+   def requirements(self):
+       self.requires("ndof-core/0.1.1")
+   ```
+
+   Position among the methods of `class Package(ConanFile)` does not
+   matter to Conan; the convention here is right above
+   `build_requirements()`, its test-dependency sibling.
+
+2. Top-level `CMakeLists.txt`: locate the package and link it.
+
+   ```cmake
+   find_package(ndof-core REQUIRED CONFIG)
+   target_link_libraries(error PUBLIC ndof::core)
+   ```
+
+   Use `PUBLIC` when the consumer's own public headers include
+   ndof-core headers (the requirement must propagate to *its*
+   consumers); `PRIVATE` when only its `src/` files do. This follows
+   the visibility tier structure established by
+   [Decision 14](decisions.md#14-header-layout-three-visibility-tiers).
+
+   `find_package` goes in the preamble, after `project()` (it needs
+   the toolchain that `project()` activates); put it with the
+   `include(...)` lines. The `target_link_libraries` call goes with
+   the other `target_*(error ...)` calls, anywhere after
+   `add_library(error ...)`; next to `target_compile_features` reads
+   naturally. The only hard ordering rules: `find_package` after
+   `project()`, and before any use of `ndof::core`.
+
+3. The source file:
+
+   ```cpp
+   #include <ndof/core/trim.hpp>
+   ```
+
+Then `scripts/build.sh debug` as always. Nothing else is needed: CI
+adds the `ndof-public` remote in every job, `scripts/build.sh` adds it
+locally on first run, and `--build=missing` builds the dependency from
+the fetched recipe. Version bumps in consumers are ordinary PRs whose
+CI proves the chain.
+
+How the include path reaches the compiler: during `conan install`, the
+CMakeDeps generator writes a `ndof-core-config.cmake` into
+`build/<Type>/generators/`, and the toolchain file steers
+`find_package` to it. That generated config defines the imported
+target `ndof::core` carrying the header and library locations;
+`target_link_libraries` propagates them, and CMake emits the include
+flag and the link line from there. The package and target names are
+declared by ndof-core's own `package_info()` (`cmake_file_name`,
+`cmake_target_name`), not by convention.
+
+The same three edits serve editable mode below unchanged; the only
+thing that moves is where the generated config points (the Conan cache
+here, the sibling checkout there).
 
 ## Live cross-repo development (editable mode)
 
 For editing a library and one of its ndof dependencies together (say,
 core and error), skip the remote and point Conan at your sibling
-checkout. Decision 16 has the reasoning; CI never uses editable mode.
+checkout. [Decision 16](decisions.md#16-cross-repo-development-editable-mode-in-a-dedicated-workspace)
+ has the reasoning. CI never uses editable mode.
 
 One-time setup: create a dedicated directory, conventionally
 `ndof-base`, containing only ndof repositories cloned side by side,
@@ -97,16 +148,17 @@ ndof-infra/scripts/init-workspace.sh /path/to/ndof-base
 
 Open `ndof-base/ndof.code-workspace` in your editor and reopen in the
 container; every repo is at `/workspaces/<parent-name>/<repo>`. With
-the workspace open, Cmd/Ctrl+Shift+B lists "build (debug, active
-repo)", a workspace-scope task that runs `scripts/build.sh debug` in
-whichever repo owns the file in the active editor; the per-repo build
-tasks appear in the same picker. Eliminating use of the
-picker completely simply requires setting a personal user keybinding.
+the workspace open, Cmd/Ctrl+Shift+B opens a picker which lists "build
+(debug, active repo)", a workspace-scope task that runs
+`scripts/build.sh debug` in whichever repo owns the file in the active
+editor. The per-repo build tasks appear in the same picker. Eliminating
+use of the picker completely simply requires setting a personal user keybinding.
 
 The procedure, assuming `ndof-base`:
 
 1. **Versions must match.** The consumer's `requires` must name the
-   version the sibling's `conanfile.py` currently carries; check with
+   version the sibling's `conanfile.py` _currently_ carries - not the
+   published version in Cloudsmith; check with
    `grep version /workspaces/ndof-base/ndof-core/conanfile.py`.
 2. **Build the dependency in place** (editable mode redirects lookups;
    it builds nothing itself):
@@ -127,6 +179,13 @@ The procedure, assuming `ndof-base`:
    future build in that container; `conan editable list` shows what is
    active. The registration and the Conan cache live in the container,
    so a container rebuild also resets them (redo steps 2 and 3).
+
+One asymmetry to keep in mind: editable mode bypasses the recipe's
+`package()` step entirely, serving headers straight from the sibling's
+working tree. A header accidentally left out of packaging therefore
+works fine in the workspace and breaks only for real consumers. CI's
+`package` job (`conan create` on every change) exists to catch exactly
+that, so trust a green `ci / package` over "it worked in editable".
 
 Shipping is unchanged: the dependency's changes go through its own PR
 and release, and the consumer's PR bumps its `requires`; a consumer PR

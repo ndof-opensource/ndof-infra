@@ -2,8 +2,9 @@
     "name": "ndof-__PROJECT_NAME__",
     // Digest-pinned dev environment. This line is the only place the image
     // digest lives: your editor starts the container from it and the
-    // reusable CI reads it from here. Bumped by hand when adopting a new
-    // image; Dependabot does not scan this file.
+    // reusable CI reads it from here. Maintained by ndof-infra's
+    // propagate-pins workflow, which opens a PR here when a new image is
+    // adopted; Dependabot does not scan this file.
     "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:fd12b770aa426f399ce91b666b56e57a4eb24b12bff014ca306e53147e36cff8",
     "remoteUser": "dev",
     // Spec default, stated explicitly because Linux hosts depend on it: at

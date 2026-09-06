@@ -1,5 +1,7 @@
-# Opens PRs to bump the SHA-pinned reusable-workflow ref (and any future
-# actions used directly by this repo). Each bump PR runs full CI before merge.
+# Covers any actions this repo uses directly (none today). Dependabot cannot
+# see the reusable-workflow refs in the CI and publish stubs (it cannot track
+# a tagless repo); ndof-infra's propagate-pins workflow opens those PRs
+# instead. Each bump PR runs full CI before merge.
 version: 2
 updates:
   - package-ecosystem: github-actions

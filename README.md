@@ -2,7 +2,7 @@
 
 Version-controlled development environment and shared project infrastructure
 for the ndof framework family (`ndof-core`, `ndof-callable`, `ndof-error`,
-and eventually the ndof framework itself).
+`ndof-patterns`, and eventually the ndof framework itself).
 
 This repository holds the **definition** of the environment. Each project repo
 pins the **published artifacts** (image digest, workflow ref) in its own

@@ -76,10 +76,11 @@ window than C++20 — is accepted and documented in each README.
 ## 5. One repository per library, stamped from a shared template
 
 **Decision.** Each open-source library (`ndof-core`, `ndof-callable`,
-`ndof-error`, …) is its own repository, instantiated from `template/` via
-`scripts/new-project.sh`. This repo prevents infrastructure drift: the image
-and the reusable CI workflow are *referenced by pin*, not copied; only
-rarely-churning files are copied at creation.
+`ndof-error`, `ndof-patterns`, …) is its own repository, instantiated
+from `template/` via `scripts/new-project.sh`. This repo prevents
+infrastructure drift: the image and the reusable CI workflow are
+*referenced by pin*, not copied; only rarely-churning files are copied
+at creation.
 
 **Rationale.** The libraries are meant to be independently consumable,
 versioned, and contributable open source. A monorepo
@@ -381,12 +382,13 @@ to `main` touching the reusable `ci.yml`, the reusable `publish.yml`,
 or `template/.devcontainer/devcontainer.json` (merging the refresh PR
 is such a push), it rewrites each library's devcontainer digest and two
 stub SHAs on a rolling `pins/propagate` branch, one PR per library.
-Both authenticate as the `ndof-pins` GitHub App, installed on all four
-repositories with Contents, Pull requests, and Workflows write; the
-Workflows permission exists because the library stubs the propagation
-rewrites live under `.github/workflows/`, which GitHub refuses to let
-any credential modify without it. The App ID and private key live in
-this repository's secrets (`PINS_APP_ID`, `PINS_APP_PRIVATE_KEY`).
+Both authenticate as the `ndof-pins` GitHub App, installed on every
+ndof repository (this one and each library) with Contents, Pull
+requests, and Workflows write; the Workflows permission exists because
+the library stubs the propagation rewrites live under
+`.github/workflows/`, which GitHub refuses to let any credential
+modify without it. The App ID and private key live in this
+repository's secrets (`PINS_APP_ID`, `PINS_APP_PRIVATE_KEY`).
 
 **Rationale.** The SHA channel was manual by necessity, not choice:
 Dependabot's github-actions updater discovers candidates through tags

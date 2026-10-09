@@ -5,7 +5,7 @@
     // visible side by side (conan editable across siblings works). Same
     // pinned image as the library repos; refresh this copy by rerunning
     // scripts/init-workspace.sh from ndof-infra. Not checked by CI.
-    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:ca126a58eae45dc8fd72cc9523e1ff2a00dd0071f38748b74916db32d7ba40bb",
+    "image": "ghcr.io/ndof-opensource/ndof-dev@sha256:bd2c567144c6966a846ad140aa649f27e619a71e601ca069bdc48bc4ddc86279",
     "remoteUser": "dev",
     "updateRemoteUserUID": true,
     "customizations": {
